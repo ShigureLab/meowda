@@ -16,6 +16,16 @@ function __meowda_exe() {{
     {exe_path} "$@"
 }}
 
+function __meowda_hashr() {{
+    if [ -n "${{ZSH_VERSION:+x}}" ]; then
+        rehash
+    elif [ -n "${{POSH_VERSION:+x}}" ]; then
+        :  # pass
+    else
+        hash -r
+    fi
+}}
+
 function __meowda_activate() {{
     local venv_base=$({exe_path} env dir)
     local venv_name=$2
@@ -40,6 +50,7 @@ function meowda() {{
         (deactivate) __meowda_deactivate ;;
         (*) __meowda_exe "$@" ;;
     esac
+    __meowda_hashr
 }}
 "#,
     );
