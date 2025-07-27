@@ -1,7 +1,22 @@
 [package]
 name = "meowda"
-version = "0.0.1"
+version = "0.0.1-post.1"
 edition = "2024"
+authors = ["Nyakku Shigure <sigure.qaq@gmail.com>"]
+description = "Meowda 🐱 —— 「喵哒」 Manage multiple Python virtual environments with ease"
+license = "MIT"
+homepage = "https://github.com/ShigureLab/meowda"
+repository = "https://github.com/ShigureLab/meowda"
+readme = "README.md"
+keywords = [
+  "Meowda",
+  "meow",
+  "cli",
+  "uv",
+  "environment",
+  "manager",
+  "conda-like",
+]
 
 [dependencies]
 anstream = "0.6.19"
