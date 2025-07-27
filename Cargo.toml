@@ -1,6 +1,6 @@
 [package]
 name = "meowda"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2024"
 authors = ["Nyakku Shigure <sigure.qaq@gmail.com>"]
 description = "Meowda 🐱 —— 「喵哒」 Manage multiple Python virtual environments with ease"
