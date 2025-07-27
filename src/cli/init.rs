@@ -52,7 +52,8 @@ fn inject_init_script(shell_profile: &str) {
     let init_script = format!(
         r#"
 # {meowda_init_comment}
-meowda generate-init-script | source /dev/stdin
+meowda generate-init-script > /tmp/meowda-init-tmp.sh
+source /tmp/meowda-init-tmp.sh
 "#
     );
     let mut file = std::fs::OpenOptions::new()

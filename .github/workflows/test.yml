@@ -28,6 +28,8 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
       - name: Build
         if: steps.cargo-cache.outputs.cache-hit != 'true'
         run: cargo build --release --verbose
@@ -35,9 +37,13 @@ jobs:
         run: cargo test --release --verbose
       - name: E2E test
         run: |
-          cargo run --release -- init init.sh
-          source init.sh
-          cargo run --release -- create venv1 -p 3.14
-          cargo run --release -- activate venv1
-          cargo run --release -- install requests
-          cargo run --release -- deactivate
+          cargo install --path .
+          bash -euxo pipefail <<'EOF'
+            meowda init init.sh
+            source init.sh
+            meowda create test-venv -p 3.14
+            meowda activate test-venv
+            meowda install requests
+            meowda deactivate
+          EOF
+          cargo uninstall meowda
