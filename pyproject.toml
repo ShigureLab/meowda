@@ -8,15 +8,7 @@ description = "Meowda 🐱 —— 「喵哒」 Manage multiple Python virtual en
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Nyakku Shigure", email = "sigure.qaq@gmail.com" }]
-keywords = [
-  "Meowda",
-  "meow",
-  "cli",
-  "uv",
-  "environment",
-  "manager",
-  "conda-like",
-]
+keywords = ["meowda", "cli", "uv", "environment", "conda-like"]
 license = { text = "MIT" }
 classifiers = [
   "License :: OSI Approved :: MIT License",
