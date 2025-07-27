@@ -1,0 +1,5 @@
+# Rust build artifacts
+/target
+
+# Python virtual environment
+.venv

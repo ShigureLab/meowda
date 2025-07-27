@@ -1,0 +1,30 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "meowda"
+description = "Meowda 🐱 —— 「喵哒」 Manage multiple Python virtual environments with ease"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Nyakku Shigure", email = "sigure.qaq@gmail.com" }]
+keywords = [
+  "Meowda",
+  "meow",
+  "cli",
+  "uv",
+  "environment",
+  "manager",
+  "conda-like",
+]
+license = { text = "MIT" }
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+[tool.maturin]
+bindings = "bin"
