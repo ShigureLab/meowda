@@ -23,7 +23,11 @@ pub async fn list(backend: &VenvBackend) {
             let indicator = if env.is_active { "* " } else { "  " };
             let name_display = format!("{}{}", indicator, env.name);
             if env.is_active {
-                println!("{} ({})", name_display.green().bold(), env.path.display().blue());
+                println!(
+                    "{} ({})",
+                    name_display.green().bold(),
+                    env.path.display().blue()
+                );
             } else {
                 println!("{} ({})", name_display, env.path.display().blue());
             }

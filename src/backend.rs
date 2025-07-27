@@ -104,7 +104,7 @@ impl VenvBackend {
         let store = Self::get_venv_store();
         let _lock = store.lock().await;
         let current_venv = Self::detect_current_venv();
-        
+
         store
             .path()
             .read_dir()
@@ -120,7 +120,7 @@ impl VenvBackend {
                             } else {
                                 false
                             };
-                            
+
                             EnvInfo {
                                 name: name.to_string(),
                                 path: env_path,
