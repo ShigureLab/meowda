@@ -5,6 +5,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::info;
 
+#[derive(Debug, Clone)]
+pub struct EnvInfo {
+    pub name: String,
+    pub path: PathBuf,
+    pub is_active: bool,
+}
+
 pub struct VenvBackend {
     uv_path: String,
 }
@@ -93,9 +100,11 @@ impl VenvBackend {
         Self::remove_venv(&store, name);
         info!("Removed virtual environment '{}'", name.green());
     }
-    pub async fn list(&self) -> Vec<String> {
+    pub async fn list(&self) -> Vec<EnvInfo> {
         let store = Self::get_venv_store();
         let _lock = store.lock().await;
+        let current_venv = Self::detect_current_venv();
+        
         store
             .path()
             .read_dir()
@@ -103,7 +112,21 @@ impl VenvBackend {
             .filter_map(|entry| {
                 entry.ok().and_then(|e| {
                     if e.path().is_dir() {
-                        e.file_name().to_str().map(|s| s.to_string())
+                        e.file_name().to_str().map(|name| {
+                            let env_path = e.path();
+                            let is_active = if let Some(ref current) = current_venv {
+                                // Compare the actual environment paths
+                                env_path.canonicalize().ok() == current.canonicalize().ok()
+                            } else {
+                                false
+                            };
+                            
+                            EnvInfo {
+                                name: name.to_string(),
+                                path: env_path,
+                                is_active,
+                            }
+                        })
                     } else {
                         None
                     }
