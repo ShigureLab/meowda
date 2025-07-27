@@ -115,8 +115,8 @@ impl VenvBackend {
                         e.file_name().to_str().map(|name| {
                             let env_path = e.path();
                             let is_active = if let Some(ref current) = current_venv {
-                                // Compare the actual environment paths
-                                env_path.canonicalize().ok() == current.canonicalize().ok()
+                                // Compare the actual environment paths using a robust method
+                                Self::paths_are_equivalent(&env_path, current)
                             } else {
                                 false
                             };
