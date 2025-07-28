@@ -31,8 +31,9 @@ impl VenvStore {
     fn detect_path() -> Result<PathBuf> {
         if let Some(tool_dir) = std::env::var_os(EnvVars::MEOWDA_VENV_DIR).filter(|s| !s.is_empty())
         {
-            std::path::absolute(tool_dir)
-                .with_context(|| "Invalid path for MEOWDA_VENV_DIR environment variable".to_string())
+            std::path::absolute(tool_dir).with_context(|| {
+                "Invalid path for MEOWDA_VENV_DIR environment variable".to_string()
+            })
         } else {
             let meowda_store = user_state_dir().unwrap_or_else(|| PathBuf::from(".meowda"));
             Ok(meowda_store.join("venvs"))
