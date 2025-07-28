@@ -2,6 +2,7 @@
 /// Heavy inspiration from the uv implementation.
 use crate::envs::EnvVars;
 use crate::store::file_lock::FileLock;
+use anyhow::{Context, Result};
 use etcetera::BaseStrategy;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -27,22 +28,20 @@ impl VenvStore {
     /// 1. The specific tool directory specified by the user, i.e., `MEOWDA_VENV_DIR`
     /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/meowda/venvs`
     /// 3. A directory in the local data directory, e.g., `./.meowda/venvs`
-    fn detect_path() -> PathBuf {
+    fn detect_path() -> Result<PathBuf> {
         if let Some(tool_dir) = std::env::var_os(EnvVars::MEOWDA_VENV_DIR).filter(|s| !s.is_empty())
         {
-            let tool_dir_clone = tool_dir.clone();
             std::path::absolute(tool_dir)
-                .unwrap_or_else(|_| panic!("Invalid path for MEOWDA_VENV_DIR: {tool_dir_clone:?}"))
+                .with_context(|| "Invalid path for MEOWDA_VENV_DIR environment variable".to_string())
         } else {
             let meowda_store = user_state_dir().unwrap_or_else(|| PathBuf::from(".meowda"));
-            meowda_store.join("venvs")
+            Ok(meowda_store.join("venvs"))
         }
     }
 
-    pub fn new() -> Self {
-        let path = Self::detect_path();
-
-        VenvStore { path }
+    pub fn new() -> Result<Self> {
+        let path = Self::detect_path()?;
+        Ok(VenvStore { path })
     }
 
     pub fn is_ready(&self) -> bool {
@@ -72,11 +71,10 @@ impl VenvStore {
         self.path.join(name).exists()
     }
 
-    pub async fn lock(&self) -> FileLock {
+    pub async fn lock(&self) -> Result<FileLock> {
         let lock_path = self.path.join(".lock");
-        // FileLockGuard::new(lock_path)
         FileLock::acquire(lock_path, "venv_store")
             .await
-            .expect("Failed to acquire lock for VenvStore")
+            .context("Failed to acquire lock for VenvStore")
     }
 }

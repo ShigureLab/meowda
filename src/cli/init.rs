@@ -1,12 +1,13 @@
 use crate::cli::args::InitArgs;
 use anstream::println;
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use std::env;
 use std::io::{Read, Write};
 
-fn get_init_script_content() -> String {
+fn get_init_script_content() -> Result<String> {
     let exe_path = env::current_exe()
-        .expect("Could not get current executable path")
+        .context("Could not get current executable path")?
         .display()
         .to_string();
     let script = format!(
@@ -54,10 +55,10 @@ function meowda() {{
 }}
 "#,
     );
-    script
+    Ok(script)
 }
 
-fn inject_init_script(shell_profile: &str) {
+fn inject_init_script(shell_profile: &str) -> Result<()> {
     // Append the initialization script to the shell profile
     let meowda_init_comment = "Meowda initialization script";
     let init_script = format!(
@@ -74,11 +75,11 @@ rm -f "$MEOWDA_TMP_SCRIPT"
         .create(true)
         .read(true)
         .open(shell_profile)
-        .expect("Failed to open shell profile");
+        .context("Failed to open shell profile")?;
 
     let mut buf = String::new();
     file.read_to_string(&mut buf)
-        .expect("Failed to read shell profile");
+        .context("Failed to read shell profile")?;
 
     if buf.contains(meowda_init_comment) {
         println!(
@@ -88,15 +89,18 @@ rm -f "$MEOWDA_TMP_SCRIPT"
         );
     } else {
         file.write_all(init_script.as_bytes())
-            .expect("Failed to write initialization script to shell profile");
+            .context("Failed to write initialization script to shell profile")?;
     }
+    Ok(())
 }
 
-pub async fn generate_init_script() {
-    let script_content = get_init_script_content();
+pub async fn generate_init_script() -> Result<()> {
+    let script_content = get_init_script_content()?;
     println!("{}", script_content);
+    Ok(())
 }
 
-pub async fn init(args: InitArgs) {
-    inject_init_script(args.shell_profile.as_str());
+pub async fn init(args: InitArgs) -> Result<()> {
+    inject_init_script(args.shell_profile.as_str())?;
+    Ok(())
 }

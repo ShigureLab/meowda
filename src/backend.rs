@@ -1,5 +1,5 @@
 use crate::store::venv_store::VenvStore;
-use anstream::panic;
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -17,17 +17,17 @@ pub struct VenvBackend {
 }
 
 impl VenvBackend {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let uv_path = "uv";
         if !Self::check_uv_available(uv_path) {
-            panic!(
+            anyhow::bail!(
                 "uv is not available, please install it first. See https://docs.astral.sh/uv/getting-started/installation/"
             );
         }
 
-        VenvBackend {
+        Ok(VenvBackend {
             uv_path: uv_path.to_string(),
-        }
+        })
     }
 
     fn check_uv_available(uv_path: &str) -> bool {
@@ -39,17 +39,18 @@ impl VenvBackend {
             .unwrap_or(false)
     }
 
-    fn get_venv_store() -> VenvStore {
-        let store = VenvStore::new();
+    fn get_venv_store() -> Result<VenvStore> {
+        let store = VenvStore::new()?;
         if !store.is_ready() {
-            store.init().expect("Failed to initialize venv store");
+            store.init().context("Failed to initialize venv store")?;
         }
-        store
+        Ok(store)
     }
 
-    fn remove_venv(store: &VenvStore, name: &str) {
+    fn remove_venv(store: &VenvStore, name: &str) -> Result<()> {
         std::fs::remove_dir_all(store.path().join(name))
-            .expect("Failed to remove virtual environment");
+            .context("Failed to remove virtual environment")?;
+        Ok(())
     }
 
     fn detect_current_venv() -> Option<PathBuf> {
@@ -58,57 +59,62 @@ impl VenvBackend {
             .and_then(|s| std::path::absolute(PathBuf::from(s)).ok())
     }
 
-    fn contains(&self, path: impl AsRef<Path>) -> bool {
-        let store = Self::get_venv_store();
-        path.as_ref().starts_with(store.path())
+    fn contains(&self, path: impl AsRef<Path>) -> Result<bool> {
+        let store = Self::get_venv_store()?;
+        Ok(path.as_ref().starts_with(store.path()))
     }
 
     // Venv management methods
-    pub async fn create(&self, name: &str, python: &str, clear: bool) {
-        let store = Self::get_venv_store();
-        let _lock = store.lock().await;
+    pub async fn create(&self, name: &str, python: &str, clear: bool) -> Result<()> {
+        let store = Self::get_venv_store()?;
+        let _lock = store.lock().await?;
         if store.exists(name) {
             if clear {
-                Self::remove_venv(&store, name);
+                Self::remove_venv(&store, name)?;
             } else {
-                panic!("Virtual environment '{name}' already exists");
+                anyhow::bail!("Virtual environment '{}' already exists", name);
             }
         }
         let venv_path = store.path().join(name);
-        Command::new(&self.uv_path)
-            .args([
-                "venv",
-                store.path().join(name).to_str().unwrap(),
-                "--python",
-                python,
-                "--seed",
-            ])
+        let venv_path_str = venv_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid path for virtual environment"))?;
+
+        let status = Command::new(&self.uv_path)
+            .args(["venv", venv_path_str, "--python", python, "--seed"])
             .status()
-            .expect("Failed to create virtual environment");
+            .context("Failed to execute uv command")?;
+
+        if !status.success() {
+            anyhow::bail!("Failed to create virtual environment");
+        }
+
         info!(
             "Created virtual environment '{}' at {}",
             name.green(),
-            venv_path.to_str().unwrap().blue()
+            venv_path_str.blue()
         );
+        Ok(())
     }
-    pub async fn remove(&self, name: &str) {
-        let store = Self::get_venv_store();
-        let _lock = store.lock().await;
+    pub async fn remove(&self, name: &str) -> Result<()> {
+        let store = Self::get_venv_store()?;
+        let _lock = store.lock().await?;
         if !store.exists(name) {
-            panic!("Virtual environment '{name}' does not exist");
+            anyhow::bail!("Virtual environment '{}' does not exist", name);
         }
-        Self::remove_venv(&store, name);
+        Self::remove_venv(&store, name)?;
         info!("Removed virtual environment '{}'", name.green());
+        Ok(())
     }
-    pub async fn list(&self) -> Vec<EnvInfo> {
-        let store = Self::get_venv_store();
-        let _lock = store.lock().await;
+    pub async fn list(&self) -> Result<Vec<EnvInfo>> {
+        let store = Self::get_venv_store()?;
+        let _lock = store.lock().await?;
         let current_venv = Self::detect_current_venv();
 
-        store
+        let entries = store
             .path()
             .read_dir()
-            .expect("Failed to read venv directory")
+            .context("Failed to read venv directory")?
             .filter_map(|entry| {
                 entry.ok().and_then(|e| {
                     if e.path().is_dir() {
@@ -132,63 +138,75 @@ impl VenvBackend {
                     }
                 })
             })
-            .collect()
+            .collect();
+        Ok(entries)
     }
 
     // Package management methods
-    pub async fn install(&self, extra_args: &[&str]) {
-        let store = Self::get_venv_store();
-        let _lock = store.lock().await;
+    pub async fn install(&self, extra_args: &[&str]) -> Result<()> {
+        let store = Self::get_venv_store()?;
+        let _lock = store.lock().await?;
         if !store.path().exists() {
-            panic!("Virtual environment does not exist");
+            anyhow::bail!("Virtual environment does not exist");
         }
-        let current_venv = Self::detect_current_venv();
-        if current_venv.is_none() {
-            panic!("No virtual environment is currently activated");
-        }
-        let current_venv = current_venv.unwrap();
-        if !self.contains(current_venv.clone()) {
-            panic!(
+        let current_venv = Self::detect_current_venv()
+            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated"))?;
+
+        if !self.contains(current_venv.clone())? {
+            anyhow::bail!(
                 "Current virtual environment ({}) is not managed by this backend ({})",
                 current_venv.display(),
                 store.path().display()
             );
         }
-        Command::new(&self.uv_path)
+
+        let status = Command::new(&self.uv_path)
             .args(["pip", "install"])
             .args(extra_args)
             .status()
-            .expect("Failed to install packages");
+            .context("Failed to execute uv pip install command")?;
+
+        if !status.success() {
+            anyhow::bail!("Failed to install packages");
+        }
+
         info!("Packages installed successfully.");
+        Ok(())
     }
-    pub async fn uninstall(&self, extra_args: &[&str]) {
-        let store = Self::get_venv_store();
-        let _lock = store.lock().await;
+    pub async fn uninstall(&self, extra_args: &[&str]) -> Result<()> {
+        let store = Self::get_venv_store()?;
+        let _lock = store.lock().await?;
         if !store.path().exists() {
-            panic!("Virtual environment does not exist");
+            anyhow::bail!("Virtual environment does not exist");
         }
-        let current_venv = Self::detect_current_venv();
-        if current_venv.is_none() {
-            panic!("No virtual environment is currently activated");
-        }
-        let current_venv = current_venv.unwrap();
-        if !self.contains(current_venv.clone()) {
-            panic!(
+        let current_venv = Self::detect_current_venv()
+            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated"))?;
+
+        if !self.contains(current_venv.clone())? {
+            anyhow::bail!(
                 "Current virtual environment ({}) is not managed by this backend ({})",
                 current_venv.display(),
                 store.path().display()
             );
         }
-        Command::new(&self.uv_path)
+
+        let status = Command::new(&self.uv_path)
             .args(["pip", "uninstall"])
             .args(extra_args)
             .status()
-            .expect("Failed to uninstall packages");
+            .context("Failed to execute uv pip uninstall command")?;
+
+        if !status.success() {
+            anyhow::bail!("Failed to uninstall packages");
+        }
+
         info!("Packages uninstalled successfully.");
+        Ok(())
     }
 
     // File management methods
-    pub fn dir(&self) -> PathBuf {
-        Self::get_venv_store().path().clone()
+    pub fn dir(&self) -> Result<PathBuf> {
+        let store = Self::get_venv_store()?;
+        Ok(store.path().clone())
     }
 }
