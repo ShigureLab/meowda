@@ -72,7 +72,10 @@ impl VenvBackend {
             if clear {
                 Self::remove_venv(&store, name)?;
             } else {
-                anyhow::bail!("Virtual environment '{}' already exists. Use --clear to recreate it", name);
+                anyhow::bail!(
+                    "Virtual environment '{}' already exists. Use --clear to recreate it",
+                    name
+                );
             }
         }
         let venv_path = store.path().join(name);
@@ -86,7 +89,9 @@ impl VenvBackend {
             .context("Failed to execute uv command")?;
 
         if !status.success() {
-            anyhow::bail!("Failed to create virtual environment. Check Python version and try again");
+            anyhow::bail!(
+                "Failed to create virtual environment. Check Python version and try again"
+            );
         }
 
         info!(
