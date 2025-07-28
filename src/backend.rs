@@ -21,7 +21,7 @@ impl VenvBackend {
         let uv_path = "uv";
         if !Self::check_uv_available(uv_path) {
             anyhow::bail!(
-                "uv is not available, please install it first. See https://docs.astral.sh/uv/getting-started/installation/"
+                "uv is not available, please install it first.\nSee https://docs.astral.sh/uv/getting-started/installation/ for installation instructions"
             );
         }
 
@@ -72,7 +72,7 @@ impl VenvBackend {
             if clear {
                 Self::remove_venv(&store, name)?;
             } else {
-                anyhow::bail!("Virtual environment '{}' already exists", name);
+                anyhow::bail!("Virtual environment '{}' already exists. Use --clear to recreate it", name);
             }
         }
         let venv_path = store.path().join(name);
@@ -86,7 +86,7 @@ impl VenvBackend {
             .context("Failed to execute uv command")?;
 
         if !status.success() {
-            anyhow::bail!("Failed to create virtual environment");
+            anyhow::bail!("Failed to create virtual environment. Check Python version and try again");
         }
 
         info!(
@@ -147,14 +147,14 @@ impl VenvBackend {
         let store = Self::get_venv_store()?;
         let _lock = store.lock().await?;
         if !store.path().exists() {
-            anyhow::bail!("Virtual environment does not exist");
+            anyhow::bail!("Virtual environment store does not exist. Please create a virtual environment first");
         }
         let current_venv = Self::detect_current_venv()
-            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated"))?;
+            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
 
         if !self.contains(current_venv.clone())? {
             anyhow::bail!(
-                "Current virtual environment ({}) is not managed by this backend ({})",
+                "Current virtual environment ({}) is not managed by meowda.\nEnvironment store: {}\nPlease activate a meowda-managed environment first",
                 current_venv.display(),
                 store.path().display()
             );
@@ -167,7 +167,7 @@ impl VenvBackend {
             .context("Failed to execute uv pip install command")?;
 
         if !status.success() {
-            anyhow::bail!("Failed to install packages");
+            anyhow::bail!("Failed to install packages. Check package names and try again");
         }
 
         info!("Packages installed successfully.");
@@ -177,14 +177,14 @@ impl VenvBackend {
         let store = Self::get_venv_store()?;
         let _lock = store.lock().await?;
         if !store.path().exists() {
-            anyhow::bail!("Virtual environment does not exist");
+            anyhow::bail!("Virtual environment store does not exist. Please create a virtual environment first");
         }
         let current_venv = Self::detect_current_venv()
-            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated"))?;
+            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
 
         if !self.contains(current_venv.clone())? {
             anyhow::bail!(
-                "Current virtual environment ({}) is not managed by this backend ({})",
+                "Current virtual environment ({}) is not managed by meowda.\nEnvironment store: {}\nPlease activate a meowda-managed environment first",
                 current_venv.display(),
                 store.path().display()
             );
@@ -197,7 +197,7 @@ impl VenvBackend {
             .context("Failed to execute uv pip uninstall command")?;
 
         if !status.success() {
-            anyhow::bail!("Failed to uninstall packages");
+            anyhow::bail!("Failed to uninstall packages. Check package names and try again");
         }
 
         info!("Packages uninstalled successfully.");

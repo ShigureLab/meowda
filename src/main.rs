@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = match backend::VenvBackend::new() {
         Ok(backend) => backend,
         Err(e) => {
-            eprintln!("Error: {e}");
+            eprintln!("{e}");
             std::process::exit(1);
         }
     };
@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if let Err(e) = result {
-        eprintln!("Error: {e}");
+        eprintln!("{e}");
         std::process::exit(1);
     }
 
