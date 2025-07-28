@@ -1,7 +1,7 @@
-use crate::store::venv_store::VenvStore;
+use crate::store::venv_store::{VenvScope, VenvStore};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use tracing::info;
 
@@ -39,8 +39,8 @@ impl VenvBackend {
             .unwrap_or(false)
     }
 
-    fn get_venv_store() -> Result<VenvStore> {
-        let store = VenvStore::new()?;
+    fn get_venv_store(scope: Option<VenvScope>) -> Result<VenvStore> {
+        let store = VenvStore::create(scope)?;
         if !store.is_ready() {
             store.init().context("Failed to initialize venv store")?;
         }
@@ -59,14 +59,15 @@ impl VenvBackend {
             .and_then(|s| std::path::absolute(PathBuf::from(s)).ok())
     }
 
-    fn contains(&self, path: impl AsRef<Path>) -> Result<bool> {
-        let store = Self::get_venv_store()?;
-        Ok(path.as_ref().starts_with(store.path()))
-    }
-
     // Venv management methods
-    pub async fn create(&self, name: &str, python: &str, clear: bool) -> Result<()> {
-        let store = Self::get_venv_store()?;
+    pub async fn create(
+        &self,
+        name: &str,
+        python: &str,
+        clear: bool,
+        scope: Option<VenvScope>,
+    ) -> Result<()> {
+        let store = Self::get_venv_store(scope)?;
         let _lock = store.lock().await?;
         if store.exists(name) {
             if clear {
@@ -101,8 +102,8 @@ impl VenvBackend {
         );
         Ok(())
     }
-    pub async fn remove(&self, name: &str) -> Result<()> {
-        let store = Self::get_venv_store()?;
+    pub async fn remove(&self, name: &str, scope: Option<VenvScope>) -> Result<()> {
+        let store = Self::get_venv_store(scope)?;
         let _lock = store.lock().await?;
         if !store.exists(name) {
             anyhow::bail!("Virtual environment '{}' does not exist", name);
@@ -111,11 +112,11 @@ impl VenvBackend {
         info!("Removed virtual environment '{}'", name.green());
         Ok(())
     }
-    pub async fn list(&self) -> Result<Vec<EnvInfo>> {
-        let store = Self::get_venv_store()?;
-        let _lock = store.lock().await?;
-        let current_venv = Self::detect_current_venv();
 
+    fn list_venvs_in_store(
+        store: &VenvStore,
+        current_venv: Option<&PathBuf>,
+    ) -> Result<Vec<EnvInfo>> {
         let entries = store
             .path()
             .read_dir()
@@ -125,7 +126,7 @@ impl VenvBackend {
                     if e.path().is_dir() {
                         e.file_name().to_str().map(|name| {
                             let env_path = e.path();
-                            let is_active = if let Some(ref current) = current_venv {
+                            let is_active = if let Some(current) = current_venv {
                                 // Compare the actual environment paths
                                 env_path.canonicalize().ok() == current.canonicalize().ok()
                             } else {
@@ -147,23 +148,48 @@ impl VenvBackend {
         Ok(entries)
     }
 
-    // Package management methods
-    pub async fn install(&self, extra_args: &[&str]) -> Result<()> {
-        let store = Self::get_venv_store()?;
-        let _lock = store.lock().await?;
-        if !store.path().exists() {
-            anyhow::bail!("Virtual environment store does not exist.");
-        }
-        let current_venv = Self::detect_current_venv()
-            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
+    pub async fn list(&self) -> Result<(Vec<EnvInfo>, Vec<EnvInfo>)> {
+        let current_venv = Self::detect_current_venv();
+        let local_envs = {
+            let local_store = VenvStore::create(Some(VenvScope::Local))?;
+            if !local_store.is_ready() {
+                vec![]
+            } else {
+                Self::list_venvs_in_store(&local_store, current_venv.as_ref())?
+            }
+        };
+        let global_envs = {
+            let global_store = VenvStore::create(Some(VenvScope::Global))?;
+            if !global_store.is_ready() {
+                vec![]
+            } else {
+                Self::list_venvs_in_store(&global_store, current_venv.as_ref())?
+            }
+        };
+        Ok((local_envs, global_envs))
+    }
 
-        if !self.contains(current_venv.clone())? {
+    // Package management methods
+    fn check_env_is_managed(current_venv: &PathBuf) -> Result<VenvScope> {
+        let local_store = VenvStore::create(Some(VenvScope::Local))?;
+        let global_store = VenvStore::create(Some(VenvScope::Global))?;
+        if local_store.contains(current_venv)? {
+            Ok(VenvScope::Local)
+        } else if global_store.contains(current_venv)? {
+            Ok(VenvScope::Global)
+        } else {
             anyhow::bail!(
-                "Current virtual environment ({}) is not managed by meowda.\nEnvironment store: {}\nPlease activate a meowda-managed environment first",
-                current_venv.display(),
-                store.path().display()
+                "Current virtual environment ({}) is not managed by meowda.\nPlease activate a meowda-managed environment first",
+                current_venv.display()
             );
         }
+    }
+    pub async fn install(&self, extra_args: &[&str]) -> Result<()> {
+        let current_venv = Self::detect_current_venv()
+            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
+        let scope = Self::check_env_is_managed(&current_venv)?;
+        let store = VenvStore::create(Some(scope))?;
+        let _lock = store.lock().await?;
 
         let status = Command::new(&self.uv_path)
             .args(["pip", "install"])
@@ -179,21 +205,11 @@ impl VenvBackend {
         Ok(())
     }
     pub async fn uninstall(&self, extra_args: &[&str]) -> Result<()> {
-        let store = Self::get_venv_store()?;
-        let _lock = store.lock().await?;
-        if !store.path().exists() {
-            anyhow::bail!("Virtual environment store does not exist.");
-        }
         let current_venv = Self::detect_current_venv()
             .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
-
-        if !self.contains(current_venv.clone())? {
-            anyhow::bail!(
-                "Current virtual environment ({}) is not managed by meowda.\nEnvironment store: {}\nPlease activate a meowda-managed environment first",
-                current_venv.display(),
-                store.path().display()
-            );
-        }
+        let scope = Self::check_env_is_managed(&current_venv)?;
+        let store = VenvStore::create(Some(scope))?;
+        let _lock = store.lock().await?;
 
         let status = Command::new(&self.uv_path)
             .args(["pip", "uninstall"])
@@ -210,8 +226,8 @@ impl VenvBackend {
     }
 
     // File management methods
-    pub fn dir(&self) -> Result<PathBuf> {
-        let store = Self::get_venv_store()?;
+    pub fn dir(&self, scope: Option<VenvScope>) -> Result<PathBuf> {
+        let store = Self::get_venv_store(scope)?;
         Ok(store.path().clone())
     }
 }

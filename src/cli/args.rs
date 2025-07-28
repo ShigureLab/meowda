@@ -32,6 +32,8 @@ pub enum Commands {
     Uninstall(UninstallArgs),
     #[clap(name = "generate-init-script", hide = true)]
     _GenerateInitScript,
+    #[clap(name = "detect-activate-venv-path", hide = true)]
+    _DetectActivateVenvPath(ActivateArgs),
 }
 
 #[derive(Debug, Parser, PartialEq)]
@@ -52,12 +54,16 @@ pub struct CreateArgs {
         help = "Clear existing virtual environment"
     )]
     pub clear: bool,
+    #[clap(flatten)]
+    pub scope: ScopeArgs,
 }
 
 #[derive(Debug, Parser, PartialEq)]
 pub struct RemoveArgs {
     #[arg(help = "Name of the virtual environment to remove")]
     pub name: String,
+    #[clap(flatten)]
+    pub scope: ScopeArgs,
 }
 
 #[derive(Debug, Parser, PartialEq)]
@@ -73,15 +79,29 @@ pub enum EnvCommandsArgs {
     #[clap(about = "Remove a virtual environment")]
     Remove(RemoveArgs),
     #[clap(about = "List all virtual environments")]
-    List,
+    List(ListArgs),
     #[clap(about = "Show directory of the virtual environment store")]
-    Dir,
+    Dir(DirArgs),
+}
+
+#[derive(Debug, Parser, PartialEq)]
+pub struct ListArgs {
+    #[clap(flatten)]
+    pub scope: ScopeArgs,
+}
+
+#[derive(Debug, Parser, PartialEq)]
+pub struct DirArgs {
+    #[clap(flatten)]
+    pub scope: ScopeArgs,
 }
 
 #[derive(Debug, Parser, PartialEq)]
 pub struct ActivateArgs {
     #[arg(help = "Name of the virtual environment to activate")]
     pub name: String,
+    #[clap(flatten)]
+    pub scope: ScopeArgs,
 }
 
 #[derive(Debug, Parser, PartialEq)]
@@ -102,4 +122,12 @@ pub struct UninstallArgs {
         help = "Uninstall packages from the current virtual environment, the arguments are passed to the `uv pip uninstall` command"
     )]
     pub extra_args: Vec<String>,
+}
+
+#[derive(Debug, Parser, PartialEq)]
+pub struct ScopeArgs {
+    #[arg(long, help = "Select local virtual environment")]
+    pub local: bool,
+    #[arg(long, help = "Select global virtual environment")]
+    pub global: bool,
 }

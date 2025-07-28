@@ -28,9 +28,15 @@ function __meowda_hashr() {{
 }}
 
 function __meowda_activate() {{
-    local venv_base=$({exe_path} env dir)
-    local venv_name=$2
-    local venv_path="$venv_base/$venv_name"
+    # Remove the first argument ("meowda activate") from "$@"
+    local activate_args=("${{@:2}}")
+    local venv_path
+    venv_path=$({exe_path} detect-activate-venv-path "${{activate_args[@]}}")
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "Virtual environment not found or activation failed."
+        return 1
+    fi
     if [ -d "$venv_path" ]; then
         source "$venv_path/bin/activate"
         echo "Activated virtual environment: $venv_path"
@@ -51,7 +57,9 @@ function meowda() {{
         (deactivate) __meowda_deactivate ;;
         (*) __meowda_exe "$@" ;;
     esac
+    local ret=$?
     __meowda_hashr
+    return $ret
 }}
 "#,
     );

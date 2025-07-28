@@ -5,7 +5,7 @@ use crate::store::file_lock::FileLock;
 use anyhow::{Context, Result};
 use etcetera::BaseStrategy;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Returns an appropriate user-level directory for storing application state.
 ///
@@ -16,32 +16,70 @@ fn user_state_dir() -> Option<PathBuf> {
         .map(|dirs| dirs.data_dir().join("meowda"))
 }
 
+#[derive(PartialEq, Eq)]
+pub enum VenvScope {
+    Local,
+    Global,
+}
+
 pub struct VenvStore {
     path: PathBuf,
 }
 
 impl VenvStore {
-    /// Detects the appropriate directory for storing virtual environments.
+    /// Detects the local venv directory in the current working directory.
     ///
     /// Prefer, in order:
-    ///
-    /// 1. The specific tool directory specified by the user, i.e., `MEOWDA_VENV_DIR`
-    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/meowda/venvs`
-    /// 3. A directory in the local data directory, e.g., `./.meowda/venvs`
-    fn detect_path() -> Result<PathBuf> {
-        if let Some(tool_dir) = std::env::var_os(EnvVars::MEOWDA_VENV_DIR).filter(|s| !s.is_empty())
+    /// 1. The specific tool directory specified by the user, i.e., `MEOWDA_LOCAL_VENV_DIR`
+    /// 2. A directory in the local data directory, e.g., `./.meowda/venvs`
+    fn local_path() -> Result<PathBuf> {
+        if let Some(tool_dir) =
+            std::env::var_os(EnvVars::MEOWDA_LOCAL_VENV_DIR).filter(|s| !s.is_empty())
         {
             std::path::absolute(tool_dir).with_context(|| {
-                "Invalid path for MEOWDA_VENV_DIR environment variable".to_string()
+                "Invalid path for `MEOWDA_LOCAL_VENV_DIR` environment variable".to_string()
             })
         } else {
-            let meowda_store = user_state_dir().unwrap_or_else(|| PathBuf::from(".meowda"));
-            Ok(meowda_store.join("venvs"))
+            let current_dir =
+                std::env::current_dir().context("Failed to get current working directory")?;
+            Ok(current_dir.join(".meowda").join("venvs"))
         }
     }
 
-    pub fn new() -> Result<Self> {
-        let path = Self::detect_path()?;
+    /// Detects the global venv directory in the current working directory.
+    ///
+    /// Prefer, in order:
+    ///
+    /// 1. The specific tool directory specified by the user, i.e., `MEOWDA_GLOBAL_VENV_DIR`
+    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/meowda/venvs`
+    fn global_path() -> Result<PathBuf> {
+        if let Some(tool_dir) =
+            std::env::var_os(EnvVars::MEOWDA_GLOBAL_VENV_DIR).filter(|s| !s.is_empty())
+        {
+            std::path::absolute(tool_dir).with_context(|| {
+                "Invalid path for `MEOWDA_GLOBAL_VENV_DIR` environment variable".to_string()
+            })
+        } else {
+            user_state_dir()
+                .map(|dir| dir.join("venvs"))
+                .ok_or_else(|| anyhow::anyhow!("Failed to determine user state directory"))
+        }
+    }
+
+    /// Detects the appropriate directory for storing virtual environments.
+    fn detect_path(venv_scope: Option<VenvScope>) -> Result<PathBuf> {
+        match venv_scope {
+            Some(VenvScope::Local) => Self::local_path(),
+            Some(VenvScope::Global) => Self::global_path(),
+            None => {
+                // Default to global if no scope is specified
+                Self::global_path()
+            }
+        }
+    }
+
+    pub fn create(scope: Option<VenvScope>) -> Result<Self> {
+        let path = Self::detect_path(scope)?;
         Ok(VenvStore { path })
     }
 
@@ -70,6 +108,10 @@ impl VenvStore {
 
     pub fn exists(&self, name: &str) -> bool {
         self.path.join(name).exists()
+    }
+
+    pub fn contains(&self, path: impl AsRef<Path>) -> Result<bool> {
+        Ok(path.as_ref().starts_with(self.path()))
     }
 
     pub async fn lock(&self) -> Result<FileLock> {
