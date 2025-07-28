@@ -147,7 +147,7 @@ impl VenvBackend {
         let store = Self::get_venv_store()?;
         let _lock = store.lock().await?;
         if !store.path().exists() {
-            anyhow::bail!("Virtual environment store does not exist. Please create a virtual environment first");
+            anyhow::bail!("Virtual environment store does not exist.");
         }
         let current_venv = Self::detect_current_venv()
             .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
@@ -177,7 +177,7 @@ impl VenvBackend {
         let store = Self::get_venv_store()?;
         let _lock = store.lock().await?;
         if !store.path().exists() {
-            anyhow::bail!("Virtual environment store does not exist. Please create a virtual environment first");
+            anyhow::bail!("Virtual environment store does not exist.");
         }
         let current_venv = Self::detect_current_venv()
             .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;

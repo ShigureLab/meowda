@@ -2,6 +2,7 @@ mod backend;
 mod cli;
 mod envs;
 mod store;
+use anstream::eprintln;
 use clap::Parser;
 
 #[tokio::main]
