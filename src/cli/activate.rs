@@ -1,10 +1,10 @@
 use crate::cli::args::ActivateArgs;
-use anstream::panic;
+use anyhow::Result;
 
-pub async fn activate(_args: ActivateArgs) {
-    panic!("Please run `meowda init <shell_profile>` to set up the activation script.");
+pub async fn activate(_args: ActivateArgs) -> Result<()> {
+    anyhow::bail!("Please run `meowda init <shell_profile>` to set up the activation script.");
 }
 
-pub async fn deactivate() {
-    panic!("Please run `meowda init <shell_profile>` to set up the activation script.");
+pub async fn deactivate() -> Result<()> {
+    anyhow::bail!("Please run `meowda init <shell_profile>` to set up the activation script.");
 }

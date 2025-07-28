@@ -11,6 +11,7 @@ readme = "README.md"
 keywords = ["meowda", "cli", "uv", "environment", "conda-like"]
 
 [dependencies]
+anyhow = "1.0"
 anstream = "0.6.19"
 clap = { version = "4.5.41", features = ["derive"] }
 etcetera = { version = "0.10.0" }
