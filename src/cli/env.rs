@@ -16,7 +16,10 @@ pub async fn create(args: CreateArgs, backend: &VenvBackend) -> Result<()> {
 
 pub async fn remove(args: RemoveArgs, backend: &VenvBackend) -> Result<()> {
     let scope = crate::cli::utils::parse_scope(&args.scope)?;
-    backend.remove(&args.name, scope).await?;
+    let detected_venv_scope = crate::cli::utils::search_venv(scope, &args.name)?;
+    backend
+        .remove(&args.name, Some(detected_venv_scope))
+        .await?;
     println!("Virtual environment '{}' removed successfully.", args.name);
     Ok(())
 }
