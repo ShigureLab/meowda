@@ -21,18 +21,21 @@ pub async fn remove(args: RemoveArgs, backend: &VenvBackend) -> Result<()> {
     Ok(())
 }
 
-fn show_envs(envs: &[EnvInfo], scope: &VenvScope) -> Result<()> {
+fn show_envs(envs: &[EnvInfo], scope: &VenvScope, shadowed_names: &[String]) -> Result<()> {
     let scope_name = match scope {
         VenvScope::Local => "local",
         VenvScope::Global => "global",
     };
     if envs.is_empty() {
-        println!("No virtual {scope_name} environments found.");
+        println!("No {scope_name} virtual environments found.");
     } else {
-        println!("Available virtual {scope_name} environments:");
+        println!("Available {scope_name} virtual environments:");
         for env in envs {
             let indicator = if env.is_active { "* " } else { "  " };
-            let name_display = format!("{}{}", indicator, env.name);
+            let mut name_display = format!("{}{}", indicator, env.name);
+            if shadowed_names.contains(&env.name) && !env.is_active {
+                name_display = name_display.dimmed().to_string();
+            }
             if env.is_active {
                 println!(
                     "{} ({})",
@@ -50,11 +53,13 @@ fn show_envs(envs: &[EnvInfo], scope: &VenvScope) -> Result<()> {
 pub async fn list(args: ListArgs, backend: &VenvBackend) -> Result<()> {
     let (local_envs, global_envs) = backend.list().await?;
     let scope = crate::cli::utils::parse_scope(&args.scope)?;
+    let mut shadowed_names = vec![];
     if scope.is_none() || scope == Some(VenvScope::Local) {
-        show_envs(&local_envs, &VenvScope::Local)?;
+        show_envs(&local_envs, &VenvScope::Local, &[])?;
+        shadowed_names.extend(local_envs.iter().map(|env| env.name.clone()));
     }
     if scope.is_none() || scope == Some(VenvScope::Global) {
-        show_envs(&global_envs, &VenvScope::Global)?;
+        show_envs(&global_envs, &VenvScope::Global, &shadowed_names)?;
     }
     Ok(())
 }
