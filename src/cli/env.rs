@@ -36,18 +36,23 @@ fn show_envs(envs: &[EnvInfo], scope: &VenvScope, shadowed_names: &[String]) -> 
         for env in envs {
             let indicator = if env.is_active { "* " } else { "  " };
             let mut name_display = format!("{}{}", indicator, env.name);
+            let mut info_display = env.path.display().blue().to_string();
             if shadowed_names.contains(&env.name) && !env.is_active {
                 name_display = name_display.dimmed().to_string();
             }
             if env.is_active {
-                println!(
-                    "{} ({})",
-                    name_display.green().bold(),
-                    env.path.display().blue()
-                );
-            } else {
-                println!("{} ({})", name_display, env.path.display().blue());
+                name_display = name_display.green().bold().to_string();
             }
+            if let Some(config) = &env.config
+                && let Some(version) = &config.version
+            {
+                info_display = format!(
+                    "{} {}",
+                    info_display,
+                    format!("python {version}").cyan().bold()
+                );
+            }
+            println!("{} ({})", name_display, info_display);
         }
     }
     Ok(())

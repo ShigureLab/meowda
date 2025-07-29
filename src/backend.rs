@@ -1,7 +1,7 @@
 use crate::store::venv_store::{VenvScope, VenvStore};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::info;
 
@@ -10,6 +10,77 @@ pub struct EnvInfo {
     pub name: String,
     pub path: PathBuf,
     pub is_active: bool,
+    pub config: Option<EnvConfig>,
+}
+
+/// Parsed `pyvenv.cfg`, refer to uv `PyVenvConfiguration`
+#[derive(Debug, Clone)]
+pub struct EnvConfig {
+    #[allow(dead_code)]
+    pub virtualenv: bool,
+    #[allow(dead_code)]
+    pub uv: bool,
+    #[allow(dead_code)]
+    pub relocatable: bool,
+    #[allow(dead_code)]
+    pub seed: bool,
+    #[allow(dead_code)]
+    pub include_system_site_packages: bool,
+    pub version: Option<String>,
+}
+
+impl EnvConfig {
+    pub fn parse(cfg: impl AsRef<Path>) -> Result<Self> {
+        let mut virtualenv = false;
+        let mut uv = false;
+        let mut relocatable = false;
+        let mut seed = false;
+        let mut include_system_site_packages = true;
+        let mut version = None;
+
+        let cfg_path = cfg.as_ref();
+        if !cfg_path.exists() {
+            anyhow::bail!("Configuration file '{}' does not exist", cfg_path.display());
+        }
+        let content =
+            std::fs::read_to_string(cfg_path).context("Failed to read configuration file")?;
+        for line in content.lines() {
+            let line = line.trim();
+            if !line.contains('=') {
+                continue; // Skip lines without '=' (e.g., comments or empty lines)
+            }
+            let (key, value) = line.split_once('=').with_context(|| {
+                format!(
+                    "Invalid line in configuration file '{}': {}",
+                    cfg_path.display(),
+                    line
+                )
+            })?;
+            let (key, value) = (key.trim(), value.trim());
+            match key {
+                "virtualenv" => virtualenv = true,
+                "uv" => uv = true,
+                "relocatable" => relocatable = value.to_lowercase() == "true",
+                "seed" => seed = value.to_lowercase() == "true",
+                "include-system-site-packages" => {
+                    include_system_site_packages = value.to_lowercase() == "true";
+                }
+                "version" | "version_info" => {
+                    version = Some(value.to_string());
+                }
+                _ => continue, // Ignore unknown keys
+            }
+        }
+
+        Ok(EnvConfig {
+            virtualenv,
+            uv,
+            relocatable,
+            seed,
+            include_system_site_packages,
+            version,
+        })
+    }
 }
 
 pub struct VenvBackend {
@@ -135,8 +206,9 @@ impl VenvBackend {
 
                             EnvInfo {
                                 name: name.to_string(),
-                                path: env_path,
+                                path: env_path.clone(),
                                 is_active,
+                                config: EnvConfig::parse(env_path.join("pyvenv.cfg")).ok(),
                             }
                         })
                     } else {
