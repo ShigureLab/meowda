@@ -46,6 +46,9 @@ impl EnvConfig {
             std::fs::read_to_string(cfg_path).context("Failed to read configuration file")?;
         for line in content.lines() {
             let line = line.trim();
+            if !line.contains('=') {
+                continue; // Skip lines without '=' (e.g., comments or empty lines)
+            }
             let (key, value) = line.split_once('=').with_context(|| {
                 format!(
                     "Invalid line in configuration file '{}': {}",
