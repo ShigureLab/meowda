@@ -6,16 +6,16 @@ Meowda, manage multiple Python virtual environments with ease. It's based on [uv
 
 Before installing Meowda, make sure you have [uv](https://docs.astral.sh/uv/) installed.
 
-### With cargo
-
-```bash
-cargo install meowda
-```
-
 ### With uv
 
 ```bash
 uv tool install meowda
+```
+
+### With cargo
+
+```bash
+cargo install meowda
 ```
 
 ## Usage
@@ -35,9 +35,10 @@ source ~/.zshrc
 After initialization, you can use Meowda to create and manage virtual environments. Here are some basic commands:
 
 ```bash
-meowda create env-1 -p 3.14
-meowda activate env-1
+meowda create meow-env -p 3.14
+meowda activate meow-env
 meowda install ruff
+meowda env list
 meowda deactivate
 ```
 
