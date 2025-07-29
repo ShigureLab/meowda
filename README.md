@@ -41,6 +41,16 @@ meowda install ruff
 meowda deactivate
 ```
 
+## VS Code Integration
+
+To integrate Meowda with VS Code, you need to add the following configuration to your `settings.json` file:
+
+```json
+{
+   "python.venvFolders": [".meowda/venvs", "~/.local/share/meowda/venvs"]
+}
+```
+
 ## Acknowledgement
 
 -  [uv](https://docs.astral.sh/uv/) for the virtual environment management.
