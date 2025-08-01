@@ -226,23 +226,23 @@ impl VenvStore {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    
+
     #[test]
     fn test_find_local_venv_dirs_in_tempdir() {
         let temp_dir = TempDir::new().unwrap();
         let original_cwd = std::env::current_dir().unwrap();
-        
+
         // Change to temp directory for testing
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         // Test should return empty vector when no .meowda/venvs exists
         let result = find_local_venv_dirs();
         assert_eq!(result.len(), 0);
-        
+
         // Restore original directory
         std::env::set_current_dir(original_cwd).unwrap();
     }
-    
+
     #[test]
     fn test_venv_store_creation() {
         // Test creating global store
@@ -250,10 +250,37 @@ mod tests {
         assert!(global_store.is_ok());
         let global_store = global_store.unwrap();
         assert_eq!(global_store.additional_local_paths.len(), 0);
-        
-        // Test creating local store  
+
+        // Test creating local store
         let local_store = VenvStore::create(Some(VenvScope::Local));
         assert!(local_store.is_ok());
         // Should work even if no additional paths found
+    }
+    
+    #[test]
+    fn test_find_local_venv_dirs_with_hierarchy() {
+        let temp_dir = TempDir::new().unwrap();
+        let original_cwd = std::env::current_dir().unwrap();
+        
+        // Create a directory hierarchy with multiple .meowda/venvs
+        let root_meowda = temp_dir.path().join(".meowda").join("venvs");
+        let sub_meowda = temp_dir.path().join("sub").join(".meowda").join("venvs");
+        let deep_dir = temp_dir.path().join("sub").join("deep");
+        
+        std::fs::create_dir_all(&root_meowda).unwrap();
+        std::fs::create_dir_all(&sub_meowda).unwrap();
+        std::fs::create_dir_all(&deep_dir).unwrap();
+        
+        // Change to deep directory
+        std::env::set_current_dir(&deep_dir).unwrap();
+        
+        // Should find both directories in correct order (closest first)
+        let result = find_local_venv_dirs();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], sub_meowda);
+        assert_eq!(result[1], root_meowda);
+        
+        // Restore original directory
+        std::env::set_current_dir(original_cwd).unwrap();
     }
 }
