@@ -119,8 +119,10 @@ impl VenvBackend {
     }
 
     fn remove_venv(store: &VenvStore, name: &str) -> Result<()> {
-        std::fs::remove_dir_all(store.path().join(name))
-            .context("Failed to remove virtual environment")?;
+        let env_path = store
+            .find_env_path(name)
+            .ok_or_else(|| anyhow::anyhow!("Virtual environment '{}' not found", name))?;
+        std::fs::remove_dir_all(&env_path).context("Failed to remove virtual environment")?;
         Ok(())
     }
 
@@ -188,47 +190,63 @@ impl VenvBackend {
         store: &VenvStore,
         current_venv: Option<&PathBuf>,
     ) -> Result<Vec<EnvInfo>> {
-        let entries = store
-            .path()
-            .read_dir()
-            .context("Failed to read venv directory")?
-            .filter_map(|entry| {
-                entry.ok().and_then(|e| {
-                    if e.path().is_dir() {
-                        e.file_name().to_str().map(|name| {
-                            let env_path = e.path();
-                            let is_active = if let Some(current) = current_venv {
-                                // Compare the actual environment paths
-                                env_path.canonicalize().ok() == current.canonicalize().ok()
-                            } else {
-                                false
-                            };
+        let mut envs = Vec::new();
+        let mut seen_names = std::collections::HashSet::new();
 
-                            EnvInfo {
-                                name: name.to_string(),
-                                path: env_path.clone(),
-                                is_active,
-                                config: EnvConfig::parse(env_path.join("pyvenv.cfg")).ok(),
-                            }
-                        })
-                    } else {
-                        None
-                    }
-                })
-            })
-            .collect();
-        Ok(entries)
+        // Process all paths (primary + additional) for local scope
+        for store_path in store.all_paths() {
+            if !store_path.exists() {
+                continue;
+            }
+
+            let entries = match store_path.read_dir() {
+                Ok(entries) => entries,
+                Err(_) => continue, // Skip if can't read directory (permission issues)
+            };
+
+            for entry in entries.filter_map(|e| e.ok()) {
+                if !entry.path().is_dir() {
+                    continue;
+                }
+
+                let file_name = entry.file_name();
+                let Some(name) = file_name.to_str() else {
+                    continue;
+                };
+
+                // Skip if we've already seen this environment name (shadowing)
+                if seen_names.contains(name) {
+                    continue;
+                }
+                seen_names.insert(name.to_string());
+
+                let env_path = entry.path();
+                let is_active = if let Some(current) = current_venv {
+                    // Compare the actual environment paths
+                    env_path.canonicalize().ok() == current.canonicalize().ok()
+                } else {
+                    false
+                };
+
+                envs.push(EnvInfo {
+                    name: name.to_string(),
+                    path: env_path.clone(),
+                    is_active,
+                    config: EnvConfig::parse(env_path.join("pyvenv.cfg")).ok(),
+                });
+            }
+        }
+
+        Ok(envs)
     }
 
     pub async fn list(&self) -> Result<(Vec<EnvInfo>, Vec<EnvInfo>)> {
         let current_venv = Self::detect_current_venv();
         let local_envs = {
             let local_store = VenvStore::create(Some(VenvScope::Local))?;
-            if !local_store.is_ready() {
-                vec![]
-            } else {
-                Self::list_venvs_in_store(&local_store, current_venv.as_ref())?
-            }
+            // For local environments, we don't require the store to be "ready"
+            // since we're searching recursively and directories may exist without initialization
+            Self::list_venvs_in_store(&local_store, current_venv.as_ref())?
         };
         let global_envs = {
             let global_store = VenvStore::create(Some(VenvScope::Global))?;

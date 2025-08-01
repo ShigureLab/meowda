@@ -23,10 +23,10 @@ pub fn search_venv(scope: Option<VenvScope>, env_name: &str) -> anyhow::Result<V
     let search_local = scope.is_none() || scope == Some(VenvScope::Local);
     let search_global = scope.is_none() || scope == Some(VenvScope::Global);
 
-    if search_local && local_store.is_ready() && local_store.path().join(env_name).exists() {
+    if search_local && local_store.exists(env_name) {
         return Ok(VenvScope::Local);
     }
-    if search_global && global_store.is_ready() && global_store.path().join(env_name).exists() {
+    if search_global && global_store.is_ready() && global_store.exists(env_name) {
         return Ok(VenvScope::Global);
     }
     anyhow::bail!(if search_local && search_global {
