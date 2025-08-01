@@ -57,9 +57,6 @@ pub enum VenvScope {
 
 pub struct VenvStore {
     path: PathBuf,
-    // For local scope, this contains all discovered local venv directories
-    // For global scope, this is empty
-    additional_local_paths: Vec<PathBuf>,
 }
 
 impl VenvStore {
@@ -121,21 +118,8 @@ impl VenvStore {
     }
 
     pub fn create(scope: Option<VenvScope>) -> Result<Self> {
-        let path = Self::detect_path(scope.clone())?;
-        let additional_local_paths = if scope == Some(VenvScope::Local) {
-            // For local scope, get all local venv directories except the primary one
-            let mut all_local_paths = find_local_venv_dirs();
-            // Remove the primary path if it exists in the list
-            all_local_paths.retain(|p| p != &path);
-            all_local_paths
-        } else {
-            Vec::new()
-        };
-
-        Ok(VenvStore {
-            path,
-            additional_local_paths,
-        })
+        let path = Self::detect_path(scope)?;
+        Ok(VenvStore { path })
     }
 
     pub fn is_ready(&self) -> bool {
@@ -161,57 +145,93 @@ impl VenvStore {
         &self.path
     }
 
-    /// Returns all local venv directories for local scope, or just the primary path for global scope
-    pub fn all_paths(&self) -> Vec<&PathBuf> {
-        let mut paths = vec![&self.path];
-        paths.extend(self.additional_local_paths.iter());
-        paths
-    }
-
     pub fn exists(&self, name: &str) -> bool {
-        // Check primary path first
-        if self.path.join(name).exists() {
-            return true;
+        // For local scope, check if we have a MEOWDA_LOCAL_VENV_DIR override
+        if std::env::var_os(crate::envs::EnvVars::MEOWDA_LOCAL_VENV_DIR)
+            .filter(|s| !s.is_empty())
+            .is_some()
+        {
+            // If MEOWDA_LOCAL_VENV_DIR is set, only check this store's path
+            return self.path.join(name).exists();
         }
-        // Check additional local paths for local scope
-        for path in &self.additional_local_paths {
-            if path.join(name).exists() {
-                return true;
+
+        // Check if this is a local store by checking if the path ends with .meowda/venvs
+        if self.path.ends_with(".meowda/venvs") {
+            // For local stores, search recursively for the environment
+            let local_dirs = find_local_venv_dirs();
+            for dir in local_dirs {
+                if dir.join(name).exists() {
+                    return true;
+                }
             }
+            false
+        } else {
+            // For global stores, just check the primary path
+            self.path.join(name).exists()
         }
-        false
     }
 
-    /// Find the specific path where an environment exists
+    /// Find the specific path where an environment exists (for local stores with recursive search)
     pub fn find_env_path(&self, name: &str) -> Option<PathBuf> {
-        // Check primary path first
-        let primary_env_path = self.path.join(name);
-        if primary_env_path.exists() {
-            return Some(primary_env_path);
+        // For local scope, check if we have a MEOWDA_LOCAL_VENV_DIR override
+        if std::env::var_os(crate::envs::EnvVars::MEOWDA_LOCAL_VENV_DIR)
+            .filter(|s| !s.is_empty())
+            .is_some()
+        {
+            // If MEOWDA_LOCAL_VENV_DIR is set, only check this store's path
+            let env_path = self.path.join(name);
+            return if env_path.exists() {
+                Some(env_path)
+            } else {
+                None
+            };
         }
-        // Check additional local paths
-        for path in &self.additional_local_paths {
-            let env_path = path.join(name);
+
+        // Check if this is a local store by checking if the path ends with .meowda/venvs
+        if self.path.ends_with(".meowda/venvs") {
+            // For local stores, search recursively for the environment
+            let local_dirs = find_local_venv_dirs();
+            for dir in local_dirs {
+                let env_path = dir.join(name);
+                if env_path.exists() {
+                    return Some(env_path);
+                }
+            }
+            None
+        } else {
+            // For global stores, just check the primary path
+            let env_path = self.path.join(name);
             if env_path.exists() {
-                return Some(env_path);
+                Some(env_path)
+            } else {
+                None
             }
         }
-        None
+    }
+
+    /// Get all paths to search for environments (used for listing)
+    pub fn all_paths(&self) -> Vec<PathBuf> {
+        // For local scope, check if we have a MEOWDA_LOCAL_VENV_DIR override
+        if std::env::var_os(crate::envs::EnvVars::MEOWDA_LOCAL_VENV_DIR)
+            .filter(|s| !s.is_empty())
+            .is_some()
+        {
+            // If MEOWDA_LOCAL_VENV_DIR is set, only return this store's path
+            return vec![self.path.clone()];
+        }
+
+        // Check if this is a local store by checking if the path ends with .meowda/venvs
+        if self.path.ends_with(".meowda/venvs") {
+            // For local stores, return all discovered local paths
+            find_local_venv_dirs()
+        } else {
+            // For global stores, just return the primary path
+            vec![self.path.clone()]
+        }
     }
 
     pub fn contains(&self, path: impl AsRef<Path>) -> Result<bool> {
-        let path_ref = path.as_ref();
-        // Check primary path
-        if path_ref.starts_with(self.path()) {
-            return Ok(true);
-        }
-        // Check additional local paths
-        for local_path in &self.additional_local_paths {
-            if path_ref.starts_with(local_path) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        Ok(path.as_ref().starts_with(self.path()))
     }
 
     pub async fn lock(&self) -> Result<FileLock> {
@@ -244,43 +264,85 @@ mod tests {
     }
 
     #[test]
-    fn test_venv_store_creation() {
-        // Test creating global store
-        let global_store = VenvStore::create(Some(VenvScope::Global));
-        assert!(global_store.is_ok());
-        let global_store = global_store.unwrap();
-        assert_eq!(global_store.additional_local_paths.len(), 0);
-
-        // Test creating local store
-        let local_store = VenvStore::create(Some(VenvScope::Local));
-        assert!(local_store.is_ok());
-        // Should work even if no additional paths found
-    }
-    
-    #[test]
     fn test_find_local_venv_dirs_with_hierarchy() {
         let temp_dir = TempDir::new().unwrap();
         let original_cwd = std::env::current_dir().unwrap();
-        
+
         // Create a directory hierarchy with multiple .meowda/venvs
         let root_meowda = temp_dir.path().join(".meowda").join("venvs");
         let sub_meowda = temp_dir.path().join("sub").join(".meowda").join("venvs");
         let deep_dir = temp_dir.path().join("sub").join("deep");
-        
+
         std::fs::create_dir_all(&root_meowda).unwrap();
         std::fs::create_dir_all(&sub_meowda).unwrap();
         std::fs::create_dir_all(&deep_dir).unwrap();
-        
-        // Change to deep directory
-        std::env::set_current_dir(&deep_dir).unwrap();
-        
-        // Should find both directories in correct order (closest first)
-        let result = find_local_venv_dirs();
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], sub_meowda);
-        assert_eq!(result[1], root_meowda);
-        
-        // Restore original directory
-        std::env::set_current_dir(original_cwd).unwrap();
+
+        // Change to deep directory and test, then immediately restore
+        {
+            std::env::set_current_dir(&deep_dir).unwrap();
+
+            // Should find both directories in correct order (closest first)
+            let result = find_local_venv_dirs();
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0], sub_meowda);
+            assert_eq!(result[1], root_meowda);
+
+            // Restore original directory before temp_dir is dropped
+            std::env::set_current_dir(&original_cwd).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_recursive_env_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let original_cwd = std::env::current_dir().unwrap();
+
+        // Create a directory hierarchy
+        let root_meowda = temp_dir.path().join(".meowda").join("venvs");
+        let sub_meowda = temp_dir.path().join("sub").join(".meowda").join("venvs");
+        let deep_dir = temp_dir.path().join("sub").join("deep");
+
+        std::fs::create_dir_all(&root_meowda).unwrap();
+        std::fs::create_dir_all(&sub_meowda).unwrap();
+        std::fs::create_dir_all(&deep_dir).unwrap();
+
+        // Create test environments
+        std::fs::create_dir_all(root_meowda.join("root-env")).unwrap();
+        std::fs::create_dir_all(sub_meowda.join("sub-env")).unwrap();
+        std::fs::create_dir_all(sub_meowda.join("shadowed-env")).unwrap(); // This will shadow root's version
+        std::fs::create_dir_all(root_meowda.join("shadowed-env")).unwrap();
+
+        // Change to deep directory and test, then immediately restore
+        {
+            std::env::set_current_dir(&deep_dir).unwrap();
+
+            // Create a local store and test recursive search
+            let store = VenvStore {
+                path: sub_meowda.clone(),
+            };
+
+            // Should find environments in both directories
+            assert!(store.exists("root-env"));
+            assert!(store.exists("sub-env"));
+            assert!(store.exists("shadowed-env"));
+
+            // Test find_env_path - should return closest path (shadowing)
+            assert_eq!(
+                store.find_env_path("sub-env"),
+                Some(sub_meowda.join("sub-env"))
+            );
+            assert_eq!(
+                store.find_env_path("shadowed-env"),
+                Some(sub_meowda.join("shadowed-env"))
+            ); // Should get sub version, not root
+            assert_eq!(
+                store.find_env_path("root-env"),
+                Some(root_meowda.join("root-env"))
+            );
+            assert_eq!(store.find_env_path("nonexistent"), None);
+
+            // Restore original directory before temp_dir is dropped
+            std::env::set_current_dir(&original_cwd).unwrap();
+        }
     }
 }

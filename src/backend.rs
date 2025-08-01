@@ -191,7 +191,7 @@ impl VenvBackend {
         current_venv: Option<&PathBuf>,
     ) -> Result<Vec<EnvInfo>> {
         let mut envs = Vec::new();
-        let mut seen_names = std::collections::HashSet::new();
+        let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         // Process all paths (primary + additional) for local scope
         for store_path in store.all_paths() {

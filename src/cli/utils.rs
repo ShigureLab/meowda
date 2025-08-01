@@ -1,5 +1,5 @@
 use crate::cli;
-use crate::store::venv_store::{VenvScope, VenvStore};
+use crate::store::venv_store::VenvScope;
 
 pub fn parse_scope(scope_args: &cli::args::ScopeArgs) -> anyhow::Result<Option<VenvScope>> {
     if scope_args.local && scope_args.global {
@@ -18,16 +18,22 @@ pub fn parse_scope(scope_args: &cli::args::ScopeArgs) -> anyhow::Result<Option<V
 }
 
 pub fn search_venv(scope: Option<VenvScope>, env_name: &str) -> anyhow::Result<VenvScope> {
-    let local_store = VenvStore::create(Some(VenvScope::Local))?;
-    let global_store = VenvStore::create(Some(VenvScope::Global))?;
+    use crate::store::venv_store::VenvStore;
+
     let search_local = scope.is_none() || scope == Some(VenvScope::Local);
     let search_global = scope.is_none() || scope == Some(VenvScope::Global);
 
-    if search_local && local_store.exists(env_name) {
-        return Ok(VenvScope::Local);
+    if search_local {
+        let local_store = VenvStore::create(Some(VenvScope::Local))?;
+        if local_store.exists(env_name) {
+            return Ok(VenvScope::Local);
+        }
     }
-    if search_global && global_store.is_ready() && global_store.exists(env_name) {
-        return Ok(VenvScope::Global);
+    if search_global {
+        let global_store = VenvStore::create(Some(VenvScope::Global))?;
+        if global_store.is_ready() && global_store.exists(env_name) {
+            return Ok(VenvScope::Global);
+        }
     }
     anyhow::bail!(if search_local && search_global {
         format!("Virtual environment '{env_name}' not found in local or global scope.")
