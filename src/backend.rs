@@ -122,6 +122,28 @@ impl VenvBackend {
             .and_then(|s| std::path::absolute(PathBuf::from(s)).ok())
     }
 
+    fn get_site_package_dir(&self, env_name: &str, store: &VenvStore) -> Result<PathBuf> {
+        let lib_dir = store.path().join(env_name).join("lib");
+        let site_package_dir = lib_dir
+            .read_dir()
+            .context("Failed to read lib directory")?
+            .filter_map(Result::ok)
+            .find(|entry| {
+                entry.file_type().is_ok_and(|ft| {
+                    ft.is_dir()
+                        && entry
+                            .file_name()
+                            .to_str()
+                            .is_some_and(|name| name.starts_with("python"))
+                })
+            })
+            .map(|entry| entry.path().join("site-packages"))
+            .ok_or_else(|| {
+                anyhow::anyhow!("No site-packages directory found in virtual environment")
+            })?;
+        Ok(site_package_dir)
+    }
+
     // Venv management methods
     pub async fn create(
         &self,
@@ -266,7 +288,7 @@ impl VenvBackend {
             anyhow::bail!("Failed to install packages. Check package names and try again");
         }
 
-        info!("Packages installed successfully.");
+        println!("Packages installed successfully.");
         Ok(())
     }
     pub async fn uninstall(&self, extra_args: &[&str]) -> Result<()> {
@@ -286,7 +308,46 @@ impl VenvBackend {
             anyhow::bail!("Failed to uninstall packages. Check package names and try again");
         }
 
-        info!("Packages uninstalled successfully.");
+        println!("Packages uninstalled successfully.");
+        Ok(())
+    }
+    pub async fn link(&self, project_name: &str, project_path: &str) -> Result<()> {
+        let current_venv = Self::detect_current_venv()
+            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
+        let scope = Self::check_env_is_managed(&current_venv)?;
+        let store = VenvStore::from_specified_scope(scope)?;
+        let venv_name = current_venv
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| anyhow::anyhow!("Invalid virtual environment name"))?;
+        let _lock = store.lock().await?;
+
+        let site_package_dir = self.get_site_package_dir(venv_name, &store)?;
+        let pth_file = site_package_dir.join(format!("meowda_link_{}.pth", project_name));
+        let abs_path =
+            std::path::absolute(project_path).context("Failed to get absolute path for project")?;
+        std::fs::write(&pth_file, abs_path.to_string_lossy().as_bytes())
+            .context("Failed to create .pth file")?;
+
+        println!("Project linked successfully.");
+        Ok(())
+    }
+    pub async fn unlink(&self, project_name: &str) -> Result<()> {
+        let current_venv = Self::detect_current_venv()
+            .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
+        let scope = Self::check_env_is_managed(&current_venv)?;
+        let store = VenvStore::from_specified_scope(scope)?;
+        let venv_name = current_venv
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| anyhow::anyhow!("Invalid virtual environment name"))?;
+        let _lock = store.lock().await?;
+
+        let site_package_dir = self.get_site_package_dir(venv_name, &store)?;
+        let pth_file = site_package_dir.join(format!("meowda_link_{}.pth", project_name));
+        std::fs::remove_file(&pth_file).context("Failed to remove .pth file")?;
+
+        println!("Project unlinked successfully.");
         Ok(())
     }
 }

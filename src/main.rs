@@ -46,6 +46,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli::args::Commands::Uninstall(uninstall_args) => {
             cli::install::uninstall(uninstall_args, &backend).await
         }
+        cli::args::Commands::Link(link_args) => cli::link::link(link_args, &backend).await,
+        cli::args::Commands::Unlink(unlink_args) => cli::link::unlink(unlink_args, &backend).await,
     };
 
     if let Err(e) = result {

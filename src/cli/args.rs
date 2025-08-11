@@ -31,6 +31,10 @@ pub enum Commands {
         about = "Uninstall packages from the current virtual environment (alias for `uv pip uninstall`)"
     )]
     Uninstall(UninstallArgs),
+    #[clap(about = "Link a project to the virtual environment")]
+    Link(LinkArgs),
+    #[clap(about = "Unlink a project from the virtual environment")]
+    Unlink(UnlinkArgs),
     #[clap(name = "generate-init-script", hide = true)]
     _GenerateInitScript,
     #[clap(name = "detect-activate-venv-path", hide = true)]
@@ -123,6 +127,20 @@ pub struct UninstallArgs {
         help = "Uninstall packages from the current virtual environment, the arguments are passed to the `uv pip uninstall` command"
     )]
     pub extra_args: Vec<String>,
+}
+
+#[derive(Debug, Parser, PartialEq)]
+pub struct LinkArgs {
+    #[arg(help = "Name of project to link")]
+    pub name: String,
+    #[arg(help = "Path to the project to link")]
+    pub path: String,
+}
+
+#[derive(Debug, Parser, PartialEq)]
+pub struct UnlinkArgs {
+    #[arg(help = "Name of project to link")]
+    pub name: String,
 }
 
 #[derive(Debug, Parser, PartialEq)]
