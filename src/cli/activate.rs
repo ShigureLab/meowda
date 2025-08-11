@@ -11,9 +11,9 @@ pub async fn deactivate() -> Result<()> {
 }
 
 pub async fn detect_activate_venv_path(args: ActivateArgs) -> Result<()> {
-    let scope = crate::cli::utils::parse_scope(&args.scope)?;
-    let detected_venv_scope = crate::cli::utils::search_venv(scope, &args.name)?;
-    let venv_store = VenvStore::create(Some(detected_venv_scope))?;
+    let scope_type = args.scope.try_into_scope_type()?;
+    let detected_venv_scope = crate::cli::utils::search_venv(scope_type, &args.name)?;
+    let venv_store = VenvStore::from_specified_scope(detected_venv_scope)?;
     let venv_path = venv_store.path().join(&args.name);
     println!("{}", venv_path.display());
     Ok(())

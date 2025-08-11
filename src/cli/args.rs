@@ -1,3 +1,4 @@
+use crate::store::venv_store::ScopeType;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug, PartialEq)]
@@ -130,4 +131,22 @@ pub struct ScopeArgs {
     pub local: bool,
     #[arg(long, help = "Select global virtual environment")]
     pub global: bool,
+}
+
+impl ScopeArgs {
+    pub fn try_into_scope_type(&self) -> anyhow::Result<ScopeType> {
+        if self.local && self.global {
+            return Err(anyhow::anyhow!(
+                "Cannot specify both local and global scopes"
+            ));
+        }
+        if !self.local && !self.global {
+            // Unspecified scope
+            return Ok(ScopeType::Unspecified);
+        }
+        if self.local {
+            return Ok(ScopeType::Local);
+        }
+        Ok(ScopeType::Global)
+    }
 }
