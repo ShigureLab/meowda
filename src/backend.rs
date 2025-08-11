@@ -236,8 +236,6 @@ impl VenvBackend {
 
     // Package management methods
     fn check_env_is_managed(current_venv: &PathBuf) -> Result<VenvScope> {
-        // let local_store = VenvStore::create(Some(VenvScope::Local))?;
-        // let global_store = VenvStore::create(Some(VenvScope::Global))?;
         let scopes = get_candidate_scopes(ScopeType::Unspecified)?;
         for scope in scopes {
             let store = VenvStore::from_specified_scope(scope.clone())?;
