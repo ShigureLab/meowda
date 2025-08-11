@@ -1,80 +1,98 @@
 use crate::backend::{EnvInfo, VenvBackend};
 use crate::cli::args::{CreateArgs, DirArgs, ListArgs, RemoveArgs};
-use crate::store::venv_store::VenvScope;
+use crate::store::venv_store::{ScopeType, VenvScope, VenvStore};
 use anstream::println;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 
 pub async fn create(args: CreateArgs, backend: &VenvBackend) -> Result<()> {
-    let scope = crate::cli::utils::parse_scope(&args.scope)?;
+    let scope_type = args.scope.try_into_scope_type()?;
+    let store = VenvStore::from_scope_type(scope_type)?;
+    store.init_if_needed()?;
     backend
-        .create(&args.name, &args.python, args.clear, scope)
+        .create(&store, &args.name, &args.python, args.clear)
         .await?;
     println!("Virtual environment '{}' created successfully.", args.name);
     Ok(())
 }
 
 pub async fn remove(args: RemoveArgs, backend: &VenvBackend) -> Result<()> {
-    let scope = crate::cli::utils::parse_scope(&args.scope)?;
-    let detected_venv_scope = crate::cli::utils::search_venv(scope, &args.name)?;
-    backend
-        .remove(&args.name, Some(detected_venv_scope))
-        .await?;
+    let scope_type = args.scope.try_into_scope_type()?;
+    let detected_venv_scope = crate::cli::utils::search_venv(scope_type, &args.name)?;
+    let store = VenvStore::from_specified_scope(detected_venv_scope)?;
+    if !store.exists(&args.name) {
+        anyhow::bail!(
+            "Virtual environment '{}' does not exist in the specified scope.",
+            args.name
+        );
+    }
+    backend.remove(&store, &args.name).await?;
     println!("Virtual environment '{}' removed successfully.", args.name);
     Ok(())
 }
 
-fn show_envs(envs: &[EnvInfo], scope: &VenvScope, shadowed_names: &[String]) -> Result<()> {
-    let scope_name = match scope {
-        VenvScope::Local => "local",
-        VenvScope::Global => "global",
-    };
+fn show_envs(envs: &[EnvInfo], shadowed_names: &[String]) -> Result<()> {
     if envs.is_empty() {
-        println!("No {scope_name} virtual environments found.");
-    } else {
-        println!("Available {scope_name} virtual environments:");
-        for env in envs {
-            let indicator = if env.is_active { "* " } else { "  " };
-            let mut name_display = format!("{}{}", indicator, env.name);
-            let mut info_display = env.path.display().blue().to_string();
-            if shadowed_names.contains(&env.name) && !env.is_active {
-                name_display = name_display.dimmed().to_string();
-            }
-            if env.is_active {
-                name_display = name_display.green().bold().to_string();
-            }
-            if let Some(config) = &env.config
-                && let Some(version) = &config.version
-            {
-                info_display = format!(
-                    "{} {}",
-                    info_display,
-                    format!("python {version}").cyan().bold()
-                );
-            }
-            println!("{} ({})", name_display, info_display);
+        return Ok(());
+    }
+    for env in envs {
+        let indicator = if env.is_active { "* " } else { "  " };
+        let mut name_display = format!("{}{}", indicator, env.name);
+        let mut info_display = env.path.display().blue().to_string();
+        if shadowed_names.contains(&env.name) && !env.is_active {
+            name_display = name_display.dimmed().to_string();
         }
+        if env.is_active {
+            name_display = name_display.green().bold().to_string();
+        }
+        if let Some(config) = &env.config
+            && let Some(version) = &config.version
+        {
+            info_display = format!(
+                "{} {}",
+                info_display,
+                format!("python {version}").cyan().bold()
+            );
+        }
+        println!("{} ({})", name_display, info_display);
     }
     Ok(())
 }
 
 pub async fn list(args: ListArgs, backend: &VenvBackend) -> Result<()> {
-    let (local_envs, global_envs) = backend.list().await?;
-    let scope = crate::cli::utils::parse_scope(&args.scope)?;
+    let all_envs = backend.list().await?;
+    let scope_type = args.scope.try_into_scope_type()?;
+    let show_local = matches!(scope_type, ScopeType::Local | ScopeType::Unspecified);
+    let show_global = matches!(scope_type, ScopeType::Global | ScopeType::Unspecified);
     let mut shadowed_names = vec![];
-    if scope.is_none() || scope == Some(VenvScope::Local) {
-        show_envs(&local_envs, &VenvScope::Local, &[])?;
-        shadowed_names.extend(local_envs.iter().map(|env| env.name.clone()));
-    }
-    if scope.is_none() || scope == Some(VenvScope::Global) {
-        show_envs(&global_envs, &VenvScope::Global, &shadowed_names)?;
+    let mut local_title_shown = false;
+    for (scope, envs) in all_envs {
+        if matches!(scope, VenvScope::Local(_)) && !show_local {
+            continue;
+        }
+        if matches!(scope, VenvScope::Global) && !show_global {
+            continue;
+        }
+        if envs.is_empty() {
+            continue;
+        }
+        if !local_title_shown && matches!(scope, VenvScope::Local(_)) {
+            println!("Available local virtual environments:");
+            local_title_shown = true;
+        }
+        if matches!(scope, VenvScope::Global) {
+            println!("Available global virtual environments:");
+        }
+        show_envs(&envs, &shadowed_names)?;
+        shadowed_names.extend(envs.iter().map(|env| env.name.clone()));
     }
     Ok(())
 }
 
 pub async fn dir(args: DirArgs, backend: &VenvBackend) -> Result<()> {
-    let scope = crate::cli::utils::parse_scope(&args.scope)?;
-    let path = backend.dir(scope)?;
+    let scope_type = args.scope.try_into_scope_type()?;
+    let store = VenvStore::from_scope_type(scope_type)?;
+    let path = backend.dir(&store)?;
     println!("{}", path.display());
     Ok(())
 }

@@ -1,34 +1,17 @@
-use crate::cli;
-use crate::store::venv_store::{VenvScope, VenvStore};
+use crate::store::venv_store::{ScopeType, VenvScope, VenvStore, get_candidate_scopes};
 
-pub fn parse_scope(scope_args: &cli::args::ScopeArgs) -> anyhow::Result<Option<VenvScope>> {
-    if scope_args.local && scope_args.global {
-        return Err(anyhow::anyhow!(
-            "Cannot specify both local and global scopes"
-        ));
-    }
-    if !scope_args.local && !scope_args.global {
-        // Unspecified scope
-        return Ok(None);
-    }
-    if scope_args.local {
-        return Ok(Some(VenvScope::Local));
-    }
-    Ok(Some(VenvScope::Global))
-}
+pub fn search_venv(scope_type: ScopeType, env_name: &str) -> anyhow::Result<VenvScope> {
+    let search_local = matches!(scope_type, ScopeType::Local | ScopeType::Unspecified);
+    let search_global = matches!(scope_type, ScopeType::Global | ScopeType::Unspecified);
+    let scopes = get_candidate_scopes(scope_type)?;
 
-pub fn search_venv(scope: Option<VenvScope>, env_name: &str) -> anyhow::Result<VenvScope> {
-    let local_store = VenvStore::create(Some(VenvScope::Local))?;
-    let global_store = VenvStore::create(Some(VenvScope::Global))?;
-    let search_local = scope.is_none() || scope == Some(VenvScope::Local);
-    let search_global = scope.is_none() || scope == Some(VenvScope::Global);
+    for scope in scopes {
+        let venv_store = VenvStore::from_specified_scope(scope.clone())?;
+        if venv_store.is_ready() && venv_store.exists(env_name) {
+            return Ok(scope);
+        }
+    }
 
-    if search_local && local_store.is_ready() && local_store.path().join(env_name).exists() {
-        return Ok(VenvScope::Local);
-    }
-    if search_global && global_store.is_ready() && global_store.path().join(env_name).exists() {
-        return Ok(VenvScope::Global);
-    }
     anyhow::bail!(if search_local && search_global {
         format!("Virtual environment '{env_name}' not found in local or global scope.")
     } else if search_local {

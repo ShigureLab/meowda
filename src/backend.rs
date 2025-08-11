@@ -1,4 +1,4 @@
-use crate::store::venv_store::{VenvScope, VenvStore};
+use crate::store::venv_store::{ScopeType, VenvScope, VenvStore, get_candidate_scopes};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use std::path::{Path, PathBuf};
@@ -110,14 +110,6 @@ impl VenvBackend {
             .unwrap_or(false)
     }
 
-    fn get_venv_store(scope: Option<VenvScope>) -> Result<VenvStore> {
-        let store = VenvStore::create(scope)?;
-        if !store.is_ready() {
-            store.init().context("Failed to initialize venv store")?;
-        }
-        Ok(store)
-    }
-
     fn remove_venv(store: &VenvStore, name: &str) -> Result<()> {
         std::fs::remove_dir_all(store.path().join(name))
             .context("Failed to remove virtual environment")?;
@@ -133,16 +125,15 @@ impl VenvBackend {
     // Venv management methods
     pub async fn create(
         &self,
+        store: &VenvStore,
         name: &str,
         python: &str,
         clear: bool,
-        scope: Option<VenvScope>,
     ) -> Result<()> {
-        let store = Self::get_venv_store(scope)?;
         let _lock = store.lock().await?;
         if store.exists(name) {
             if clear {
-                Self::remove_venv(&store, name)?;
+                Self::remove_venv(store, name)?;
             } else {
                 anyhow::bail!(
                     "Virtual environment '{}' already exists. Use --clear to recreate it",
@@ -173,13 +164,13 @@ impl VenvBackend {
         );
         Ok(())
     }
-    pub async fn remove(&self, name: &str, scope: Option<VenvScope>) -> Result<()> {
-        let store = Self::get_venv_store(scope)?;
+
+    pub async fn remove(&self, store: &VenvStore, name: &str) -> Result<()> {
         let _lock = store.lock().await?;
         if !store.exists(name) {
             anyhow::bail!("Virtual environment '{}' does not exist", name);
         }
-        Self::remove_venv(&store, name)?;
+        Self::remove_venv(store, name)?;
         info!("Removed virtual environment '{}'", name.green());
         Ok(())
     }
@@ -220,47 +211,49 @@ impl VenvBackend {
         Ok(entries)
     }
 
-    pub async fn list(&self) -> Result<(Vec<EnvInfo>, Vec<EnvInfo>)> {
+    pub async fn list(&self) -> Result<Vec<(VenvScope, Vec<EnvInfo>)>> {
         let current_venv = Self::detect_current_venv();
-        let local_envs = {
-            let local_store = VenvStore::create(Some(VenvScope::Local))?;
-            if !local_store.is_ready() {
-                vec![]
-            } else {
-                Self::list_venvs_in_store(&local_store, current_venv.as_ref())?
+        let scopes = get_candidate_scopes(ScopeType::Unspecified)?;
+
+        let mut results = Vec::new();
+        for scope in scopes {
+            let venv_store = VenvStore::from_specified_scope(scope.clone())?;
+            if !venv_store.is_ready() {
+                continue;
             }
-        };
-        let global_envs = {
-            let global_store = VenvStore::create(Some(VenvScope::Global))?;
-            if !global_store.is_ready() {
-                vec![]
-            } else {
-                Self::list_venvs_in_store(&global_store, current_venv.as_ref())?
-            }
-        };
-        Ok((local_envs, global_envs))
+            results.push((
+                scope.clone(),
+                Self::list_venvs_in_store(&venv_store, current_venv.as_ref())?,
+            ));
+        }
+        Ok(results)
+    }
+
+    // File management methods
+    pub fn dir(&self, store: &VenvStore) -> Result<PathBuf> {
+        Ok(store.path().clone())
     }
 
     // Package management methods
     fn check_env_is_managed(current_venv: &PathBuf) -> Result<VenvScope> {
-        let local_store = VenvStore::create(Some(VenvScope::Local))?;
-        let global_store = VenvStore::create(Some(VenvScope::Global))?;
-        if local_store.contains(current_venv)? {
-            Ok(VenvScope::Local)
-        } else if global_store.contains(current_venv)? {
-            Ok(VenvScope::Global)
-        } else {
-            anyhow::bail!(
-                "Current virtual environment ({}) is not managed by meowda.\nPlease activate a meowda-managed environment first",
-                current_venv.display()
-            );
+        let scopes = get_candidate_scopes(ScopeType::Unspecified)?;
+        for scope in scopes {
+            let store = VenvStore::from_specified_scope(scope.clone())?;
+            if store.contains(current_venv)? {
+                return Ok(scope);
+            }
         }
+
+        anyhow::bail!(
+            "Current virtual environment ({}) is not managed by meowda.\nPlease activate a meowda-managed environment first",
+            current_venv.display()
+        );
     }
     pub async fn install(&self, extra_args: &[&str]) -> Result<()> {
         let current_venv = Self::detect_current_venv()
             .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
         let scope = Self::check_env_is_managed(&current_venv)?;
-        let store = VenvStore::create(Some(scope))?;
+        let store = VenvStore::from_specified_scope(scope)?;
         let _lock = store.lock().await?;
 
         let status = Command::new(&self.uv_path)
@@ -280,7 +273,7 @@ impl VenvBackend {
         let current_venv = Self::detect_current_venv()
             .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
         let scope = Self::check_env_is_managed(&current_venv)?;
-        let store = VenvStore::create(Some(scope))?;
+        let store = VenvStore::from_specified_scope(scope)?;
         let _lock = store.lock().await?;
 
         let status = Command::new(&self.uv_path)
@@ -295,11 +288,5 @@ impl VenvBackend {
 
         info!("Packages uninstalled successfully.");
         Ok(())
-    }
-
-    // File management methods
-    pub fn dir(&self, scope: Option<VenvScope>) -> Result<PathBuf> {
-        let store = Self::get_venv_store(scope)?;
-        Ok(store.path().clone())
     }
 }
