@@ -139,7 +139,7 @@ pub struct LinkArgs {
 
 #[derive(Debug, Parser, PartialEq)]
 pub struct UnlinkArgs {
-    #[arg(help = "Name of project to link")]
+    #[arg(help = "Name of project to unlink")]
     pub name: String,
 }
 
