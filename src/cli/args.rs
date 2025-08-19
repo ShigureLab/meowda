@@ -1,8 +1,18 @@
 use crate::store::venv_store::ScopeType;
+use clap::builder::Styles;
+use clap::builder::styling::{AnsiColor, Effects};
 use clap::{Parser, Subcommand};
+
+// Configures Clap v3-style help menu colors
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .usage(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .literal(AnsiColor::Cyan.on_default().effects(Effects::BOLD))
+    .placeholder(AnsiColor::Cyan.on_default());
 
 #[derive(Parser, Debug, PartialEq)]
 #[command(author, version, about, long_about = None)]
+#[command(styles=STYLES)]
 pub struct Args {
     #[command(subcommand)]
     pub command: Commands,
