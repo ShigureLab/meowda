@@ -122,7 +122,7 @@ pub struct ActivateArgs {
 #[derive(Debug, Parser, PartialEq)]
 pub struct InstallArgs {
     #[arg(trailing_var_arg = true)]
-    #[arg(num_args = 1..)]
+    #[arg(allow_hyphen_values = true)]
     #[clap(
         help = "Install packages in the current virtual environment, the arguments are passed to the `uv pip install` command"
     )]
@@ -132,7 +132,7 @@ pub struct InstallArgs {
 #[derive(Debug, Parser, PartialEq)]
 pub struct UninstallArgs {
     #[arg(trailing_var_arg = true)]
-    #[arg(num_args = 1..)]
+    #[arg(allow_hyphen_values = true)]
     #[clap(
         help = "Uninstall packages from the current virtual environment, the arguments are passed to the `uv pip uninstall` command"
     )]
