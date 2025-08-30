@@ -149,7 +149,7 @@ Add to your `settings.json`:
 
 **Q: Why was Meowda created?**
 
-A: As an AI infrastructure engineer, I frequently need to share Python virtual environments across multiple projects. For this use case, conda works exceptionally well, and I'm genuinely grateful for it. However, conda can be quite heavy. When Astral released uv, I became an early adopter and quickly migrated my personal development projects to it. uv is both convenient and blazingly fast, which is genuinely impressive. Unfortunately, switching to uv directly in my work environment would actually hurt my productivity, since managing virtual environments across projects with uv alone is quite cumbersome. That's why I decided to wrap uv with simple logic that enables name-based management of multiple virtual environments—and thus Meowda was born.
+A: Meowda bridges the gap between conda's convenience and uv's speed. While conda is great for managing environments across projects, it can be heavy. While uv is blazingly fast, managing multiple environments with it can be cumbersome. Meowda combines the best of both worlds by providing a conda-like interface powered by uv's performance.
 
 **Q: What's the difference between Meowda and conda?**
 
