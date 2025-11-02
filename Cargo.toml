@@ -14,7 +14,7 @@ keywords = ["meowda", "cli", "uv", "environment", "conda-like"]
 anyhow = "1.0"
 anstream = "0.6.19"
 clap = { version = "4.5.41", features = ["derive"] }
-etcetera = { version = "0.10.0" }
+etcetera = { version = "0.11.0" }
 fs-err = "3.1.1"
 fs2 = "0.4.3"
 owo-colors = "4.2.2"
