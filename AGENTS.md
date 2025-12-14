@@ -10,12 +10,12 @@ This is a Rust based repository to manage multiple Python virtual environments w
 
 > [!NOTE]
 >
-> The commands above maybe outdated. Always check the latest workflow in the repository. e.g. [`lint-and-fmt.yml`](./workflows/lint-and-fmt.yml) and [`test.yml`](./workflows/test.yml).
+> The commands above maybe outdated. Always check the latest workflow in the repository. e.g. [`lint-and-fmt.yml`](.github/workflows/lint-and-fmt.yml) and [`test.yml`](.github/workflows/test.yml).
 
 ### Development Flow
 
--  Please refer to the [README](../README.md) for user guidelines.
--  For development, ensure you have the latest version of Rust installed. All commands available in [`copilot-setup-steps.yml`](./workflows/copilot-setup-steps.yml) should be run before starting development.
+-  Please refer to the [README](./README.md) for user guidelines.
+-  For development, ensure you have the latest version of Rust installed. All commands available in [`copilot-setup-steps.yml`](.github/workflows/copilot-setup-steps.yml) should be run before starting development.
 -  Use `cargo run` to run the application locally.
 
 For example, use these commands to create, activate, and install packages in a virtual environment:
