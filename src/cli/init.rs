@@ -72,7 +72,7 @@ fn inject_init_script(shell_profile: &str) -> Result<()> {
     let init_script = format!(
         r#"
 # {meowda_init_comment}
-MEOWDA_TMP_SCRIPT="/tmp/meowda-init-tmp.sh"
+MEOWDA_TMP_SCRIPT="/tmp/meowda-init-tmp-$RANDOM.sh"
 meowda generate-init-script > "$MEOWDA_TMP_SCRIPT"
 source "$MEOWDA_TMP_SCRIPT"
 rm -f "$MEOWDA_TMP_SCRIPT"
