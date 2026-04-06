@@ -123,9 +123,20 @@ Add to your `settings.json`:
 
 ```json
 {
+   "python-envs.globalSearchPaths": ["~/.local/share/meowda/venvs"],
+  "python-envs.workspaceSearchPaths": [".meowda/venvs"],
+}
+```
+
+<details>
+<summary>For Legacy Python Settings</summary>
+
+```json
+{
    "python.venvFolders": [".meowda/venvs", "~/.local/share/meowda/venvs"]
 }
 ```
+</details>
 
 ## 📖 Command Reference
 
