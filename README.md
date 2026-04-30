@@ -108,6 +108,16 @@ $ meowda deactivate
 # Recreate environment (clear existing packages)
 $ meowda create my-env -p 3.12 --clear
 
+# Fork from the current Python environment
+$ meowda fork cloned-env
+
+# Fork from another managed environment
+$ meowda fork cloned-tools --from tools
+
+# Fork from any external virtual environment or Python executable
+$ meowda fork cloned-ci --from /path/to/.venv
+$ meowda fork cloned-system --from /path/to/python
+
 # Install specific versions or from requirements
 $ meowda install "django>=4.0,<5.0" "pytest==7.4.0"
 $ meowda install -r requirements.txt
@@ -143,6 +153,8 @@ Add to your `settings.json`:
 **Environment Management**
 
 -  `meowda create <name> -p <version>` - Create environment
+-  `meowda fork <name>` - Fork from the current active environment
+-  `meowda fork <name> --from <env|path>` - Fork from another managed environment or any Python environment path/executable
 -  `meowda activate <name>` - Activate environment
 -  `meowda deactivate` - Deactivate current environment
 -  `meowda remove <name>` - Remove environment

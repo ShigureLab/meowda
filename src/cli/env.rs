@@ -1,22 +1,29 @@
-use crate::backend::{EnvInfo, VenvBackend};
 use crate::cli::args::{CreateArgs, DirArgs, ListArgs, RemoveArgs};
 use crate::store::venv_store::{ScopeType, VenvScope, VenvStore};
+use crate::venv::{CreateOptions, EnvInfo, VenvService};
 use anstream::println;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 
-pub async fn create(args: CreateArgs, backend: &VenvBackend) -> Result<()> {
+pub async fn create(args: CreateArgs, venv_service: &VenvService) -> Result<()> {
     let scope_type = args.scope.try_into_scope_type()?;
     let store = VenvStore::from_scope_type(scope_type)?;
     store.init_if_needed()?;
-    backend
-        .create(&store, &args.name, &args.python, args.clear)
+    venv_service
+        .create(
+            &store,
+            &args.name,
+            CreateOptions {
+                python: args.python.as_deref(),
+                clear: args.clear,
+            },
+        )
         .await?;
     println!("Virtual environment '{}' created successfully.", args.name);
     Ok(())
 }
 
-pub async fn remove(args: RemoveArgs, backend: &VenvBackend) -> Result<()> {
+pub async fn remove(args: RemoveArgs, venv_service: &VenvService) -> Result<()> {
     let scope_type = args.scope.try_into_scope_type()?;
     let detected_venv_scope = crate::cli::utils::search_venv(scope_type, &args.name)?;
     let store = VenvStore::from_specified_scope(detected_venv_scope)?;
@@ -26,7 +33,7 @@ pub async fn remove(args: RemoveArgs, backend: &VenvBackend) -> Result<()> {
             args.name
         );
     }
-    backend.remove(&store, &args.name).await?;
+    venv_service.remove(&store, &args.name).await?;
     println!("Virtual environment '{}' removed successfully.", args.name);
     Ok(())
 }
@@ -59,8 +66,8 @@ fn show_envs(envs: &[EnvInfo], shadowed_names: &[String]) -> Result<()> {
     Ok(())
 }
 
-pub async fn list(args: ListArgs, backend: &VenvBackend) -> Result<()> {
-    let all_envs = backend.list().await?;
+pub async fn list(args: ListArgs, venv_service: &VenvService) -> Result<()> {
+    let all_envs = venv_service.list().await?;
     let scope_type = args.scope.try_into_scope_type()?;
     let show_local = matches!(scope_type, ScopeType::Local | ScopeType::Unspecified);
     let show_global = matches!(scope_type, ScopeType::Global | ScopeType::Unspecified);
@@ -89,10 +96,10 @@ pub async fn list(args: ListArgs, backend: &VenvBackend) -> Result<()> {
     Ok(())
 }
 
-pub async fn dir(args: DirArgs, backend: &VenvBackend) -> Result<()> {
+pub async fn dir(args: DirArgs, venv_service: &VenvService) -> Result<()> {
     let scope_type = args.scope.try_into_scope_type()?;
     let store = VenvStore::from_scope_type(scope_type)?;
-    let path = backend.dir(&store)?;
+    let path = venv_service.dir(&store)?;
     println!("{}", path.display());
     Ok(())
 }

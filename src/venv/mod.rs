@@ -1,9 +1,17 @@
+mod create;
+mod fork;
+
 use crate::store::venv_store::{ScopeType, VenvScope, VenvStore, get_candidate_scopes};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::info;
+
+use self::create::create_uv_venv;
+use self::fork::{
+    create_with_source, ensure_distinct_source_target, resolve_current_source, resolve_named_source,
+};
 
 #[derive(Debug, Clone)]
 pub struct EnvInfo {
@@ -47,7 +55,7 @@ impl EnvConfig {
         for line in content.lines() {
             let line = line.trim();
             if !line.contains('=') {
-                continue; // Skip lines without '=' (e.g., comments or empty lines)
+                continue;
             }
             let (key, value) = line.split_once('=').with_context(|| {
                 format!(
@@ -68,7 +76,7 @@ impl EnvConfig {
                 "version" | "version_info" => {
                     version = Some(value.to_string());
                 }
-                _ => continue, // Ignore unknown keys
+                _ => continue,
             }
         }
 
@@ -83,11 +91,22 @@ impl EnvConfig {
     }
 }
 
-pub struct VenvBackend {
+pub struct VenvService {
     uv_path: String,
 }
 
-impl VenvBackend {
+pub struct CreateOptions<'a> {
+    pub python: Option<&'a str>,
+    pub clear: bool,
+}
+
+pub struct ForkOptions<'a> {
+    pub scope_type: ScopeType,
+    pub source: Option<&'a str>,
+    pub clear: bool,
+}
+
+impl VenvService {
     pub fn new() -> Result<Self> {
         let uv_path = "uv";
         if !Self::check_uv_available(uv_path) {
@@ -96,13 +115,12 @@ impl VenvBackend {
             );
         }
 
-        Ok(VenvBackend {
+        Ok(VenvService {
             uv_path: uv_path.to_string(),
         })
     }
 
     fn check_uv_available(uv_path: &str) -> bool {
-        // check if uv is available by commanding `uv --version`
         Command::new(uv_path)
             .arg("--version")
             .output()
@@ -116,7 +134,7 @@ impl VenvBackend {
         Ok(())
     }
 
-    fn detect_current_venv() -> Option<PathBuf> {
+    pub(super) fn detect_current_venv() -> Option<PathBuf> {
         std::env::var("VIRTUAL_ENV")
             .ok()
             .and_then(|s| std::path::absolute(PathBuf::from(s)).ok())
@@ -144,17 +162,15 @@ impl VenvBackend {
         Ok(site_package_dir)
     }
 
-    // Venv management methods
     pub async fn create(
         &self,
         store: &VenvStore,
         name: &str,
-        python: &str,
-        clear: bool,
+        options: CreateOptions<'_>,
     ) -> Result<()> {
         let _lock = store.lock().await?;
         if store.exists(name) {
-            if clear {
+            if options.clear {
                 Self::remove_venv(store, name)?;
             } else {
                 anyhow::bail!(
@@ -164,25 +180,51 @@ impl VenvBackend {
             }
         }
         let venv_path = store.path().join(name);
-        let venv_path_str = venv_path
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid path for virtual environment"))?;
-
-        let status = Command::new(&self.uv_path)
-            .args(["venv", venv_path_str, "--python", python, "--seed"])
-            .status()
-            .context("Failed to execute uv command")?;
-
-        if !status.success() {
-            anyhow::bail!(
-                "Failed to create virtual environment. Check Python version and try again"
-            );
-        }
-
+        create_uv_venv(
+            &self.uv_path,
+            &venv_path,
+            options.python.unwrap_or("3.13"),
+            true,
+            false,
+        )?;
         info!(
             "Created virtual environment '{}' at {}",
             name.green(),
-            venv_path_str.blue()
+            venv_path.display().to_string().blue()
+        );
+        Ok(())
+    }
+
+    pub async fn fork(
+        &self,
+        store: &VenvStore,
+        name: &str,
+        options: ForkOptions<'_>,
+    ) -> Result<()> {
+        let source_layout = options
+            .source
+            .map(|source| resolve_named_source(source, options.scope_type))
+            .transpose()?
+            .unwrap_or(resolve_current_source()?);
+        let venv_path = store.path().join(name);
+        let _lock = store.lock().await?;
+        ensure_distinct_source_target(&source_layout, &venv_path)?;
+        if store.exists(name) {
+            if options.clear {
+                Self::remove_venv(store, name)?;
+            } else {
+                anyhow::bail!(
+                    "Virtual environment '{}' already exists. Use --clear to recreate it",
+                    name
+                );
+            }
+        }
+        create_with_source(&self.uv_path, &source_layout, &venv_path)?;
+        info!(
+            "Forked virtual environment '{}' from {} to {}",
+            name.green(),
+            source_layout.prefix().display().to_string().blue(),
+            venv_path.display().to_string().blue()
         );
         Ok(())
     }
@@ -211,7 +253,6 @@ impl VenvBackend {
                         e.file_name().to_str().map(|name| {
                             let env_path = e.path();
                             let is_active = if let Some(current) = current_venv {
-                                // Compare the actual environment paths
                                 env_path.canonicalize().ok() == current.canonicalize().ok()
                             } else {
                                 false
@@ -251,12 +292,10 @@ impl VenvBackend {
         Ok(results)
     }
 
-    // File management methods
     pub fn dir(&self, store: &VenvStore) -> Result<PathBuf> {
         Ok(store.path().clone())
     }
 
-    // Package management methods
     fn check_env_is_managed(current_venv: &PathBuf) -> Result<VenvScope> {
         let scopes = get_candidate_scopes(ScopeType::Unspecified)?;
         for scope in scopes {
@@ -271,6 +310,7 @@ impl VenvBackend {
             current_venv.display()
         );
     }
+
     pub async fn install(&self, extra_args: &[&str]) -> Result<()> {
         let current_venv = Self::detect_current_venv()
             .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
@@ -291,6 +331,7 @@ impl VenvBackend {
         println!("Packages installed successfully.");
         Ok(())
     }
+
     pub async fn uninstall(&self, extra_args: &[&str]) -> Result<()> {
         let current_venv = Self::detect_current_venv()
             .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
@@ -311,6 +352,7 @@ impl VenvBackend {
         println!("Packages uninstalled successfully.");
         Ok(())
     }
+
     pub async fn link(&self, project_name: &str, project_path: &str) -> Result<()> {
         let current_venv = Self::detect_current_venv()
             .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
@@ -332,6 +374,7 @@ impl VenvBackend {
         println!("Project linked successfully.");
         Ok(())
     }
+
     pub async fn unlink(&self, project_name: &str) -> Result<()> {
         let current_venv = Self::detect_current_venv()
             .ok_or_else(|| anyhow::anyhow!("No virtual environment is currently activated.\nPlease activate a virtual environment first with: meowda activate <env_name>"))?;
