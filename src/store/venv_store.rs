@@ -50,6 +50,7 @@ pub fn get_candidate_scopes(scope_type: ScopeType) -> Result<Vec<VenvScope>> {
     Ok(scopes)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScopeType {
     Local,
     Global,

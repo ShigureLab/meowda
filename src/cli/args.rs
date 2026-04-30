@@ -22,6 +22,8 @@ pub struct Args {
 pub enum Commands {
     #[clap(about = "Create a new virtual environment")]
     Create(CreateArgs),
+    #[clap(about = "Fork a virtual environment from an existing environment or Python executable")]
+    Fork(ForkArgs),
     #[clap(about = "Remove a virtual environment")]
     Remove(RemoveArgs),
     #[command(subcommand)]
@@ -55,13 +57,29 @@ pub enum Commands {
 pub struct CreateArgs {
     #[arg(help = "Name of the virtual environment")]
     pub name: String,
+    #[arg(short, long, help = "Python version/path to use (default: 3.13)")]
+    pub python: Option<String>,
     #[arg(
         short,
         long,
-        default_value = "3.13",
-        help = "Python version/path to use"
+        default_value = "false",
+        help = "Clear existing virtual environment"
     )]
-    pub python: String,
+    pub clear: bool,
+    #[clap(flatten)]
+    pub scope: ScopeArgs,
+}
+
+#[derive(Debug, Parser, PartialEq)]
+pub struct ForkArgs {
+    #[arg(help = "Name of the virtual environment")]
+    pub name: String,
+    #[arg(
+        long = "from",
+        value_name = "SOURCE",
+        help = "Fork from a managed environment name, a virtual environment path, or a Python executable (defaults to the current active Python environment, or the default Python if none is active)"
+    )]
+    pub source: Option<String>,
     #[arg(
         short,
         long,
@@ -91,6 +109,8 @@ pub struct InitArgs {
 pub enum EnvCommandsArgs {
     #[clap(about = "Create a new virtual environment")]
     Create(CreateArgs),
+    #[clap(about = "Fork a virtual environment from an existing environment or Python executable")]
+    Fork(ForkArgs),
     #[clap(about = "Remove a virtual environment")]
     Remove(RemoveArgs),
     #[clap(about = "List all virtual environments")]
