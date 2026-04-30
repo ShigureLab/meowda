@@ -57,7 +57,7 @@ pub enum Commands {
 pub struct CreateArgs {
     #[arg(help = "Name of the virtual environment")]
     pub name: String,
-    #[arg(short, long, help = "Python version/path to use (default: 3.13)")]
+    #[arg(short, long, help = "Python version/path to use (default: 3.14)")]
     pub python: Option<String>,
     #[arg(short, long, help = "Clear existing virtual environment")]
     pub clear: bool,
