@@ -183,7 +183,7 @@ impl VenvService {
         create_uv_venv(
             &self.uv_path,
             &venv_path,
-            options.python.unwrap_or("3.13"),
+            options.python.unwrap_or("3.14"),
             true,
             false,
         )?;

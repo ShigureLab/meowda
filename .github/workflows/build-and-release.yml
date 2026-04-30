@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.13"]
+        python-version: ["3.14"]
         target: [x86_64, x86, aarch64, armv7, s390x, ppc64le]
     name: Ubuntu, ${{ matrix.target }}, Python ${{ matrix.python-version }}
     steps:
@@ -41,7 +41,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ["3.13"]
+        python-version: ["3.14"]
         target: [x64, x86]
     name: Windows, ${{ matrix.target }}, Python ${{ matrix.python-version }}
     steps:
@@ -66,7 +66,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python-version: ["3.13"]
+        python-version: ["3.14"]
         target: [x86_64, aarch64]
     name: macOS, ${{ matrix.target }}, Python ${{ matrix.python-version }}
     steps:

@@ -152,7 +152,7 @@ Add to your `settings.json`:
 
 **Environment Management**
 
--  `meowda create <name> -p <version>` - Create environment
+-  `meowda create <name> [-p <version>]` - Create environment (defaults to Python 3.14)
 -  `meowda fork <name>` - Fork from the current active environment
 -  `meowda fork <name> --from <env|path>` - Fork from another managed environment or any Python environment path/executable
 -  `meowda activate <name>` - Activate environment
