@@ -59,12 +59,7 @@ pub struct CreateArgs {
     pub name: String,
     #[arg(short, long, help = "Python version/path to use (default: 3.13)")]
     pub python: Option<String>,
-    #[arg(
-        short,
-        long,
-        default_value = "false",
-        help = "Clear existing virtual environment"
-    )]
+    #[arg(short, long, help = "Clear existing virtual environment")]
     pub clear: bool,
     #[clap(flatten)]
     pub scope: ScopeArgs,
@@ -80,12 +75,7 @@ pub struct ForkArgs {
         help = "Fork from a managed environment name, a virtual environment path, or a Python executable (defaults to the current active Python environment, or the default Python if none is active)"
     )]
     pub source: Option<String>,
-    #[arg(
-        short,
-        long,
-        default_value = "false",
-        help = "Clear existing virtual environment"
-    )]
+    #[arg(short, long, help = "Clear existing virtual environment")]
     pub clear: bool,
     #[clap(flatten)]
     pub scope: ScopeArgs,

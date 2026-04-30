@@ -9,7 +9,9 @@ use std::process::Command;
 use tracing::info;
 
 use self::create::create_uv_venv;
-use self::fork::{create_with_source, resolve_current_source, resolve_named_source};
+use self::fork::{
+    create_with_source, ensure_distinct_source_target, resolve_current_source, resolve_named_source,
+};
 
 #[derive(Debug, Clone)]
 pub struct EnvInfo {
@@ -204,7 +206,9 @@ impl VenvService {
             .map(|source| resolve_named_source(source, options.scope_type))
             .transpose()?
             .unwrap_or(resolve_current_source()?);
+        let venv_path = store.path().join(name);
         let _lock = store.lock().await?;
+        ensure_distinct_source_target(&source_layout, &venv_path)?;
         if store.exists(name) {
             if options.clear {
                 Self::remove_venv(store, name)?;
@@ -215,7 +219,6 @@ impl VenvService {
                 );
             }
         }
-        let venv_path = store.path().join(name);
         create_with_source(&self.uv_path, &source_layout, &venv_path)?;
         info!(
             "Forked virtual environment '{}' from {} to {}",

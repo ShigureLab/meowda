@@ -72,11 +72,7 @@ pub(super) fn create_with_source(
     source: &PythonEnvLayout,
     target_path: &Path,
 ) -> Result<()> {
-    let target_path = normalize_path(target_path)?;
-    let source_prefix = normalize_path(&source.prefix)?;
-    if source_prefix == target_path {
-        anyhow::bail!("Fork source and target cannot be the same environment");
-    }
+    let target_path = ensure_distinct_source_target(source, target_path)?;
 
     create_uv_venv(
         uv_path,
@@ -93,6 +89,18 @@ pub(super) fn create_with_source(
     copy_site_packages(source, &target, &rewrite)?;
     copy_scripts(source, &target, &rewrite)?;
     Ok(())
+}
+
+pub(super) fn ensure_distinct_source_target(
+    source: &PythonEnvLayout,
+    target_path: &Path,
+) -> Result<PathBuf> {
+    let target_path = normalize_path(target_path)?;
+    let source_prefix = normalize_path(&source.prefix)?;
+    if source_prefix == target_path {
+        anyhow::bail!("Fork source and target cannot be the same environment");
+    }
+    Ok(target_path)
 }
 
 fn normalize_path(path: impl AsRef<Path>) -> Result<PathBuf> {
@@ -160,7 +168,7 @@ fn copy_permissions(source: &Path, target: &Path) -> Result<()> {
 }
 
 #[cfg(unix)]
-fn create_symlink(target: &Path, link_path: &Path, _is_dir: bool) -> Result<()> {
+fn create_symlink(target: &Path, link_path: &Path, _is_dir: Option<bool>) -> Result<()> {
     std::os::unix::fs::symlink(target, link_path).with_context(|| {
         format!(
             "Failed to create symlink '{}' -> '{}'",
@@ -171,19 +179,60 @@ fn create_symlink(target: &Path, link_path: &Path, _is_dir: bool) -> Result<()> 
 }
 
 #[cfg(windows)]
-fn create_symlink(target: &Path, link_path: &Path, is_dir: bool) -> Result<()> {
-    if is_dir {
-        std::os::windows::fs::symlink_dir(target, link_path)
-    } else {
-        std::os::windows::fs::symlink_file(target, link_path)
+fn create_symlink(target: &Path, link_path: &Path, is_dir: Option<bool>) -> Result<()> {
+    let try_dir = || {
+        std::os::windows::fs::symlink_dir(target, link_path).with_context(|| {
+            format!(
+                "Failed to create directory symlink '{}' -> '{}'",
+                link_path.display(),
+                target.display()
+            )
+        })
+    };
+    let try_file = || {
+        std::os::windows::fs::symlink_file(target, link_path).with_context(|| {
+            format!(
+                "Failed to create file symlink '{}' -> '{}'",
+                link_path.display(),
+                target.display()
+            )
+        })
+    };
+
+    match is_dir {
+        Some(true) => try_dir(),
+        Some(false) => try_file(),
+        None => match try_dir() {
+            Ok(()) => Ok(()),
+            Err(dir_err) => match try_file() {
+                Ok(()) => Ok(()),
+                Err(file_err) => Err(anyhow::anyhow!(
+                    "Failed to create symlink '{}' -> '{}': {} ; {}",
+                    link_path.display(),
+                    target.display(),
+                    dir_err,
+                    file_err
+                )),
+            },
+        },
     }
-    .with_context(|| {
-        format!(
-            "Failed to create symlink '{}' -> '{}'",
-            link_path.display(),
-            target.display()
-        )
-    })
+}
+
+fn resolve_link_target(source: &Path, link_target: &Path) -> PathBuf {
+    if link_target.is_absolute() {
+        return link_target.to_path_buf();
+    }
+
+    source
+        .parent()
+        .map(|parent| parent.join(link_target))
+        .unwrap_or_else(|| link_target.to_path_buf())
+}
+
+fn symlink_target_is_dir(source: &Path, link_target: &Path) -> Option<bool> {
+    fs::metadata(resolve_link_target(source, link_target))
+        .map(|meta| meta.is_dir())
+        .ok()
 }
 
 fn rewrite_symlink_target(target: &Path, rewrite: &RewritePaths) -> PathBuf {
@@ -263,9 +312,7 @@ fn copy_path(
         let link_target = fs::read_link(source)
             .with_context(|| format!("Failed to read symlink '{}'", source.display()))?;
         let rewritten_target = rewrite_symlink_target(&link_target, rewrite);
-        let link_is_dir = fs::metadata(source)
-            .map(|meta| meta.is_dir())
-            .unwrap_or(false);
+        let link_is_dir = symlink_target_is_dir(source, &link_target);
         create_symlink(&rewritten_target, target, link_is_dir)?;
         return Ok(());
     }
@@ -341,8 +388,6 @@ fn parse_python_layout(output: &str) -> Result<PythonEnvLayout> {
     };
 
     let prefix = required("prefix")?;
-    let base_prefix = required("base_prefix")?;
-    let real_prefix = values.get("real_prefix").cloned().unwrap_or_default();
     let include_system_site_packages = EnvConfig::parse(prefix.join("pyvenv.cfg"))
         .map(|config| config.include_system_site_packages)
         .unwrap_or(false);
@@ -354,8 +399,7 @@ fn parse_python_layout(output: &str) -> Result<PythonEnvLayout> {
         purelib: required("purelib")?,
         platlib: required("platlib")?,
         scripts_dir: required("scripts")?,
-        include_system_site_packages: prefix.join("pyvenv.cfg").exists()
-            && (prefix != base_prefix || !real_prefix.is_empty() || include_system_site_packages),
+        include_system_site_packages,
         requested_prefix: None,
     })
 }
@@ -659,6 +703,62 @@ mod tests {
         assert_eq!(layout.prefix, PathBuf::from("/tmp/source"));
         assert_eq!(layout.base_python, PathBuf::from("/usr/bin/python3.12"));
         assert_eq!(layout.scripts_dir, PathBuf::from("/tmp/source/bin"));
+        Ok(())
+    }
+
+    #[test]
+    fn parse_python_layout_respects_include_system_site_packages_config() -> Result<()> {
+        let temp = tempdir()?;
+        let source_root = temp.path().join("source");
+        fs::create_dir_all(&source_root)?;
+        fs::write(
+            source_root.join("pyvenv.cfg"),
+            "include-system-site-packages = false\n",
+        )?;
+
+        let output = [
+            format!(
+                "executable\u{1f}{}",
+                source_root.join("bin/python").display()
+            ),
+            "base_executable\u{1f}/usr/bin/python3.12".to_string(),
+            format!("prefix\u{1f}{}", source_root.display()),
+            "base_prefix\u{1f}/usr".to_string(),
+            "real_prefix\u{1f}".to_string(),
+            format!("scripts\u{1f}{}", source_root.join("bin").display()),
+            format!(
+                "purelib\u{1f}{}",
+                source_root.join("lib/python3.12/site-packages").display()
+            ),
+            format!(
+                "platlib\u{1f}{}",
+                source_root.join("lib/python3.12/site-packages").display()
+            ),
+        ]
+        .join("\n");
+
+        let layout = parse_python_layout(&output)?;
+        assert!(!layout.include_system_site_packages);
+        Ok(())
+    }
+
+    #[test]
+    fn ensure_distinct_source_target_rejects_same_environment() -> Result<()> {
+        let temp = tempdir()?;
+        let source_root = temp.path().join("source-env");
+        fs::create_dir_all(&source_root)?;
+        let layout = PythonEnvLayout {
+            python: source_root.join("bin/python"),
+            base_python: PathBuf::from("/usr/bin/python3.12"),
+            prefix: source_root.clone(),
+            purelib: source_root.join("lib/python3.12/site-packages"),
+            platlib: source_root.join("lib/python3.12/site-packages"),
+            scripts_dir: source_root.join("bin"),
+            include_system_site_packages: false,
+            requested_prefix: None,
+        };
+
+        assert!(ensure_distinct_source_target(&layout, &source_root).is_err());
         Ok(())
     }
 
