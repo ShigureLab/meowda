@@ -17,6 +17,10 @@
 
 Make sure you have [uv](https://docs.astral.sh/uv/) installed. See the [official installation guide](https://docs.astral.sh/uv/getting-started/installation/) for detailed instructions.
 
+Installing the Python package requires Python 3.11 or newer. Package CI builds and installs it on Python 3.11–3.15, including free-threaded Python 3.15 (`3.15t`), and tests creating and forking environments with those interpreters. Python 3.15 is currently tested with prerelease interpreters.
+
+Meowda is a standalone Rust executable, packaged by maturin with `bindings = "bin"`; its platform wheels use the `py3-none` tag, not a CPython/PyO3 extension ABI. The package's minimum Python version does not restrict the versions of environments Meowda can manage through uv. `meowda create` still defaults to Python 3.14; use `-p 3.15` or `-p 3.15t` to opt into those versions.
+
 ### Install Meowda
 
 #### Using uv (Recommended)

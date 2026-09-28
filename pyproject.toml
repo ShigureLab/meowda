@@ -6,13 +6,18 @@ build-backend = "maturin"
 name = "meowda"
 description = "Meowda 🐱 —— 「喵哒」 Manage multiple Python virtual environments with ease"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Nyakku Shigure", email = "sigure.qaq@gmail.com" }]
 keywords = ["meowda", "cli", "uv", "environment", "conda-like"]
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
   "Programming Language :: Rust",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]

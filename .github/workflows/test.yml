@@ -47,3 +47,30 @@ jobs:
             meowda deactivate
           EOF
           cargo uninstall meowda
+
+  python-package:
+    name: Python package (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15", "3.15t"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build sdist and wheel
+        # With no format flags, uv builds the wheel from the sdist via PEP 517.
+        # bindings = "bin" produces a py3-none platform wheel, not a PyO3 module.
+        run: uv build --out-dir dist
+      - name: Install wheel
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python dist/*.whl
+      - name: Test installed package and managed environments
+        run: |
+          export PATH="$PWD/.venv/bin:$PATH"
+          bash tests/python-package.sh '${{ matrix.python-version }}'
