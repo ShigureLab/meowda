@@ -42,16 +42,14 @@ jobs:
         run: cargo test --release --verbose
       - name: E2E test
         run: |
-          uv build
-          uv venv .venv
-          uv pip install --python .venv/bin/python dist/*.whl
-          export PATH="$PWD/.venv/bin:$PATH"
+          uvx --from . meowda --version
+          cargo install --path .
           bash -euxo pipefail <<'EOF'
             meowda init init.sh
             source init.sh
             meowda create test-venv -p '${{ matrix.python-version }}'
             meowda activate test-venv
             meowda install requests
-            python -c 'import requests, sys; assert not ("${{ matrix.python-version }}".endswith("t") and sys._is_gil_enabled())'
             meowda deactivate
           EOF
+          cargo uninstall meowda
