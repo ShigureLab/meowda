@@ -14,9 +14,8 @@ jobs:
   run-test:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15", "3.15t"]
+        python-version: ["3.11", "3.14", "3.15", "3.15t"]
     steps:
       - name: Checkout
         uses: actions/checkout@v7

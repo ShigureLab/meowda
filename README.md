@@ -17,8 +17,6 @@
 
 Make sure you have [uv](https://docs.astral.sh/uv/) installed. See the [official installation guide](https://docs.astral.sh/uv/getting-started/installation/) for detailed instructions.
 
-The Python package requires Python 3.11+ and is tested through Python 3.15 (currently prerelease), including `3.15t`. This installation minimum does not restrict the Python versions managed through uv.
-
 ### Install Meowda
 
 #### Using uv (Recommended)
