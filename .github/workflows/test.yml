@@ -13,6 +13,9 @@ env:
 jobs:
   run-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.14", "3.15", "3.15t"]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -30,6 +33,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install uv
         uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Build
         if: steps.cargo-cache.outputs.cache-hit != 'true'
         run: cargo build --release --verbose
@@ -37,11 +42,12 @@ jobs:
         run: cargo test --release --verbose
       - name: E2E test
         run: |
+          uvx --from . meowda --version
           cargo install --path .
           bash -euxo pipefail <<'EOF'
             meowda init init.sh
             source init.sh
-            meowda create test-venv -p 3.14
+            meowda create test-venv -p '${{ matrix.python-version }}'
             meowda activate test-venv
             meowda install requests
             meowda deactivate

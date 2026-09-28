@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "meowda"
 description = "Meowda 🐱 —— 「喵哒」 Manage multiple Python virtual environments with ease"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Nyakku Shigure", email = "sigure.qaq@gmail.com" }]
 keywords = ["meowda", "cli", "uv", "environment", "conda-like"]
 license = "MIT"
