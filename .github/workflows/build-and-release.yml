@@ -13,7 +13,10 @@ permissions:
 
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    # ubuntu-latest is now Ubuntu 26.04, whose Docker blocks socketcall(2), so the
+    # i386 manylinux container has no network. Pin until it is fixed upstream:
+    # https://github.com/actions/runner-images/issues/14790
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.14"]
